@@ -252,6 +252,7 @@ $('board').addEventListener('pointerdown', (e) => {
       renderer.floatText(px, py - 20, label, combo >= 10 ? '#ff6fa8' : combo >= 6 ? '#ffcf4a' : '#ffffff');
     }
     if (state.won) winPending = true;
+    else if (state.stuck) window.setTimeout(() => showLose(), 750);
   } else if (res.kind === 'bump') {
     combo = 0;
     renderer.bump(res.cat, res.dir, res.steps);
@@ -364,7 +365,16 @@ function showLose(firstTime = true): void {
     fails.set(n, (fails.get(n) ?? 0) + 1);
   }
   const actions: Action[] = [];
-  if (reason === 'time') {
+  if (reason === 'stuck') {
+    actions.push({
+      label: t('watchUndo'), primary: true,
+      run: async () => {
+        closeModal();
+        if (await watchRewarded()) undoToWinnable();
+        else showLose(false);
+      },
+    });
+  } else if (reason === 'time') {
     actions.push({
       label: t('watchTime'), primary: true,
       run: async () => {
@@ -409,20 +419,49 @@ function showLose(firstTime = true): void {
       startLevel(n);
     },
   });
-  const art = reason === 'time' ? `<span class="big-emoji">⏰</span>` : icons.brokenHeart;
-  openModal(art, t(reason === 'time' ? 'timeUpTitle' : 'loseTitle'), t(reason === 'time' ? 'timeUpText' : 'loseText'), actions);
+  const copy: Record<string, [string, Key, Key]> = {
+    time: ['<span class="big-emoji">⏰</span>', 'timeUpTitle', 'timeUpText'],
+    stuck: ['<span class="big-emoji">🌀</span>', 'stuckTitle', 'stuckText'],
+    lives: [icons.brokenHeart, 'loseTitle', 'loseText'],
+  };
+  const [art, title, text] = copy[reason ?? 'lives'];
+  openModal(art, t(title), t(text), actions);
+}
+
+/**
+ * Takes moves back until the position can be won again (usually one or two). One rewarded ad
+ * buys the whole rewind, so getting stuck stays a lesson rather than a wall.
+ */
+function undoToWinnable(): void {
+  if (!state) return;
+  let guard = state.history.length;
+  do {
+    const c = state.undo();
+    if (!c) break;
+    renderer.restore(c);
+  } while (guard-- > 0 && state.hint().kind === 'doomed');
+  renderProgress();
+  sfx.hint();
 }
 
 $('hint-btn').addEventListener('click', () => {
   sfx.unlock();
   if (!state || state.won) return;
+  const h = state.hint();
+  if (h.kind === 'doomed') {
+    // Spin cats are turned so that no order can win from here: say so instead of burning a hint.
+    openModal('<span class="big-emoji">🌀</span>', t('doomedTitle'), t('doomedText'), [
+      { label: t('watchUndo'), primary: true, run: async () => { closeModal(); if (await watchRewarded()) undoToWinnable(); } },
+      { label: t('retry'), run: () => { closeModal(); startLevel(state!.level.number); } },
+      { label: t('cancel'), run: closeModal },
+    ]);
+    return;
+  }
   if (data.hints > 0) {
-    const cat = state.hint();
-    if (!cat) return;
     data.hints--;
     save(data);
     renderHints();
-    renderer.hint(cat);
+    renderer.hint(h.cat);
     sfx.hint();
     return;
   }
@@ -539,7 +578,6 @@ function loop(now: number): void {
   renderer.frame(now);
   if (winPending && renderer.catsVisible === 0) finishWin();
   if (state && clockRunning(now)) {
-    state.advance(dt);
     if (state.tick(dt)) showLose();
     renderTimer();
   }

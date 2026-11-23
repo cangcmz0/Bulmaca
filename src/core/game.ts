@@ -1,5 +1,5 @@
-import { firstBlocker, freeCats, occupancy } from './solver';
-import { Cat, DX, DY, Dir, Level, exitDir, idx } from './types';
+import { dirAt, findSolution, firstBlocker, freeCats, occupancy } from './solver';
+import { Cat, Dir, Level, idx } from './types';
 
 export const START_LIVES = 3;
 
@@ -8,6 +8,8 @@ export type TapResult =
   | { kind: 'wake'; cat: Cat }
   | { kind: 'exit'; cat: Cat; dir: Dir }
   | { kind: 'bump'; cat: Cat; dir: Dir; blocker: Cat; /** cells the cat travels before hitting */ steps: number };
+
+export type HintResult = { kind: 'move'; cat: Cat } | { kind: 'doomed' };
 
 /** Pure game rules, no rendering. The renderer animates whatever this returns. */
 export class GameState {
@@ -20,8 +22,8 @@ export class GameState {
   timeLeft: number | null;
   /** Ids of sleepy cats that have not been woken yet. */
   asleep: Set<number>;
-  /** Play time that drives spin cats; only advances while the board is live. */
-  spinClock = 0;
+  /** Cats that left, in order. Its length is how many quarter turns spin cats have made. */
+  history: Cat[] = [];
 
   constructor(level: Level) {
     this.level = level;
@@ -31,19 +33,13 @@ export class GameState {
     this.asleep = new Set(level.cats.filter((c) => c.kind === 'sleepy').map((c) => c.id));
   }
 
-  /** Quarter turns a spin cat has made so far, as a float (for smooth drawing). */
-  spinTurns(): number {
-    return this.spinClock / this.level.spinPeriod;
+  get exits(): number {
+    return this.history.length;
   }
 
   /** The direction this cat would run if tapped right now. */
   runDir(c: Cat): Dir {
-    if (c.kind === 'spin') return ((c.dir + Math.floor(this.spinTurns())) % 4) as Dir;
-    return exitDir(c);
-  }
-
-  advance(dt: number): void {
-    if (!this.won && !this.lost) this.spinClock += dt;
+    return dirAt(c, this.exits);
   }
 
   wakeAll(): Cat[] {
@@ -56,10 +52,16 @@ export class GameState {
     return this.cats.size === 0;
   }
 
-  get loseReason(): 'lives' | 'time' | null {
+  /** No cat can leave right now. Spin cats only turn when a cat leaves, so this is final. */
+  get stuck(): boolean {
+    return !this.won && this.free().length === 0;
+  }
+
+  get loseReason(): 'lives' | 'time' | 'stuck' | null {
     if (this.won) return null;
     if (this.lives <= 0) return 'lives';
     if (this.timeLeft !== null && this.timeLeft <= 0) return 'time';
+    if (this.stuck) return 'stuck';
     return null;
   }
 
@@ -83,6 +85,10 @@ export class GameState {
     return undefined;
   }
 
+  free(): Cat[] {
+    return freeCats(this.level.w, this.level.h, [...this.cats.values()], this.exits);
+  }
+
   tap(x: number, y: number): TapResult {
     if (this.won || this.lost) return { kind: 'none' };
     const cat = this.catAt(x, y);
@@ -92,12 +98,12 @@ export class GameState {
       return { kind: 'wake', cat };
     }
     const { w, h } = this.level;
-    const list = [...this.cats.values()];
-    const grid = occupancy(w, h, list);
+    const grid = occupancy(w, h, [...this.cats.values()]);
     const dir = this.runDir(cat);
     const blockerId = firstBlocker(w, h, grid, cat, dir);
     if (blockerId === -1) {
       this.cats.delete(cat.id);
+      this.history.push(cat);
       return { kind: 'exit', cat, dir };
     }
     const blocker = this.cats.get(blockerId)!;
@@ -107,30 +113,25 @@ export class GameState {
     return { kind: 'bump', cat, dir, blocker, steps };
   }
 
-  /** A cat that can leave right now (any free cat is always a safe move). */
-  hint(): Cat | undefined {
-    const free = freeCats(this.level.w, this.level.h, [...this.cats.values()]);
-    if (free.length === 0) return undefined;
-    // Prefer the free cat that unblocks the most others, it feels like a smarter hint.
+  /** Puts the last cat that left back on the board (spin cats turn back with it). */
+  undo(): Cat | undefined {
+    const cat = this.history.pop();
+    if (cat) this.cats.set(cat.id, cat);
+    return cat;
+  }
+
+  /**
+   * A move that keeps the level winnable, or 'doomed' when the current position can no longer
+   * be won (the player has to undo). If the search runs out of budget, falls back to any free cat.
+   */
+  hint(): HintResult {
     const { w, h } = this.level;
-    let best = free[0];
-    let bestScore = -Infinity;
-    for (const f of free) {
-      // Spin cats make you wait, so a hint points at them only when nothing else is free.
-      let score = f.kind === 'spin' ? -100 : 0;
-      for (const c of this.cats.values()) {
-        if (c.id === f.id) continue;
-        const d = exitDir(c);
-        let x = c.x + DX[d], y = c.y + DY[d];
-        while (x >= 0 && y >= 0 && x < w && y < h) {
-          const o = [...this.cats.values()].find((k) => k.x === x && k.y === y);
-          if (o) { if (o.id === f.id) score++; break; }
-          x += DX[d]; y += DY[d];
-        }
-      }
-      if (score > bestScore) { bestScore = score; best = f; }
-    }
-    return best;
+    const list = [...this.cats.values()];
+    const res = findSolution(w, h, list, this.exits);
+    if (res.path && res.path.length > 0) return { kind: 'move', cat: this.cats.get(res.path[0])! };
+    if (res.complete) return { kind: 'doomed' };
+    const free = this.free();
+    return free.length ? { kind: 'move', cat: free[0] } : { kind: 'doomed' };
   }
 
   addLife(n = 1): void {

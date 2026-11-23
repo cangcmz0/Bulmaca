@@ -1,5 +1,5 @@
 import { Rng, hashSeed } from './rng';
-import { firstBlocker, occupancy, solve } from './solver';
+import { dirAt, firstBlocker, greedyOrder, occupancy, solve, stuckRate } from './solver';
 import { Cat, CatKind, Dir, DX, DY, Level, idx } from './types';
 
 export const COAT_COUNT = 6;
@@ -26,7 +26,7 @@ interface Params {
 }
 
 /** The game's official level count. Difficulty is tuned to keep rising all the way to here. */
-export const TOTAL_LEVELS = 8000;
+export const TOTAL_LEVELS = 40000;
 
 /** Largest board that still reads well on a phone held upright. */
 export const MAX_W = 9;
@@ -59,8 +59,8 @@ export function paramsFor(n: number): Params {
   // Every level after the two tutorials gets hardened: no more "tap anything and win" boards.
   let harden = n < 3 ? 0 : Math.min(4000, Math.round(60 + 12 * n));
   let secPerCat = 0;
-  // 0.39 at level 3, 0.45 at 20, 0.53 at 100, 0.65 at 1000, 0.74 at 8000
-  let chain = 0.36 + 0.036 * Math.log2(1 + m / 5);
+  // 0.39 at level 3, 0.44 at 20, 0.50 at 100, 0.60 at 1000, 0.76 at 40000
+  let chain = 0.36 + 0.031 * Math.log2(1 + m / 5);
   let free = 0; // extra allowance of cats that can leave at the very start
 
   if (kind === 'easy') {
@@ -83,9 +83,9 @@ export function paramsFor(n: number): Params {
     free = -1;
   }
 
-  // Timers start once players know the game and tighten until level 8000: 4.2 s per cat at the
-  // start, ~2.6 s at level 1000, 1.6 s at the end.
-  const tight = 4.2 - 0.322 * Math.log2(1 + m / 30);
+  // Timers start once players know the game and tighten until the last level: 4.2 s per cat at
+  // the start, ~2.9 s at level 1000, 1.6 s at level 40000.
+  const tight = 4.2 - 0.25 * Math.log2(1 + m / 30);
   if ((kind === 'hard' || kind === 'boss') && n >= 20) secPerCat = kind === 'boss' ? tight * 1.15 : tight;
   else if (kind === 'normal' && n >= 150) secPerCat = tight * 1.6;
 
@@ -199,7 +199,7 @@ function tutorial(n: number): Level | null {
       { id: 1, x: 1, y: 1, dir: 1, coat: 2 },
       { id: 2, x: 2, y: 1, dir: 1, coat: 4 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null, spinPeriod: 1.8 };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
   }
   if (n === 2) {
     const w = 3, h = 4;
@@ -210,7 +210,7 @@ function tutorial(n: number): Level | null {
       { id: 3, x: 2, y: 2, dir: 1, coat: 0 },
       { id: 4, x: 1, y: 3, dir: 3, coat: 2 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null, spinPeriod: 1.8 };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
   }
   return null;
 }
@@ -274,29 +274,39 @@ function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], bu
 }
 
 /** Level where each special cat first appears (a normal level, never a boss). */
-export const INTRO: Record<Exclude<CatKind, 'normal'>, number> = { sleepy: 12, scared: 22, spin: 35 };
+export const INTRO: Record<Exclude<CatKind, 'normal'>, number> = { spin: 8, sleepy: 15, scared: 25 };
 
-export function spinPeriodFor(n: number): number {
-  const m = Math.min(n, TOTAL_LEVELS);
-  return Math.max(0.9, 1.8 - 0.1 * Math.log2(1 + m / INTRO.spin));
-}
-
-/** How many of each special cat a level gets. Shares grow slowly to level 8000. */
+/** How many of each special cat a level gets. Shares grow slowly to the last level. */
 export function specialsFor(n: number, kind: LevelKind, cats: number): Record<Exclude<CatKind, 'normal'>, number> {
   const m = Math.min(n, TOTAL_LEVELS);
-  if (n === INTRO.sleepy) return { sleepy: 3, scared: 0, spin: 0 };
-  if (n === INTRO.scared) return { sleepy: 0, scared: 3, spin: 0 };
-  if (n === INTRO.spin) return { sleepy: 0, scared: 0, spin: 1 };
+  const intro = { sleepy: 0, scared: 0, spin: 0 };
+  if (n === INTRO.spin) return { ...intro, spin: 2 };
+  if (n === INTRO.sleepy) return { ...intro, sleepy: 3, spin: 2 };
+  if (n === INTRO.scared) return { ...intro, scared: 3, spin: 3 };
   const k = kind === 'easy' ? 0.5 : kind === 'hard' ? 1.2 : kind === 'boss' ? 1.35 : 1;
   const share = (start: number, base: number, slope: number, cap: number) =>
     n < start ? 0 : Math.min(cap, (base + slope * Math.log2(1 + m / start)) * k);
-  const sleepy = Math.round(cats * share(INTRO.sleepy, 0.07, 0.035, 0.3));
-  const scared = Math.round(cats * share(INTRO.scared, 0.05, 0.03, 0.25));
+  const sleepy = Math.round(cats * share(INTRO.sleepy, 0.07, 0.03, 0.28));
+  const scared = Math.round(cats * share(INTRO.scared, 0.05, 0.025, 0.22));
+  // Spin cats carry the planning part of the puzzle, so they grow fastest.
   let spin = 0;
-  if (n > INTRO.spin && kind !== 'easy') {
-    spin = Math.min(6, 1 + Math.floor(1.2 * Math.log2(1 + m / INTRO.spin))) + (kind === 'hard' ? 1 : kind === 'boss' ? 2 : 0);
+  if (n > INTRO.spin) {
+    spin = 2 + Math.floor(1.3 * Math.log2(1 + m / INTRO.spin));
+    if (kind === 'easy') spin = Math.max(1, Math.floor(spin / 2));
+    if (kind === 'hard') spin += 1;
+    if (kind === 'boss') spin += 2;
   }
-  return { sleepy, scared, spin: Math.min(spin, 8) };
+  return { sleepy, scared, spin: Math.min(spin, 14, Math.floor(cats * 0.3)) };
+}
+
+/** Share of random-tapping players that should get stuck: how much planning a level demands. */
+export function stuckTargetFor(n: number, kind: LevelKind): number {
+  const m = Math.min(n, TOTAL_LEVELS);
+  let t = 0.25 + 0.048 * Math.log2(1 + m / INTRO.spin); // 0.30 at 8, 0.6 at ~1300, 0.84 at 40000
+  if (kind === 'easy') t -= 0.15;
+  if (kind === 'hard') t += 0.08;
+  if (kind === 'boss') t += 0.12;
+  return Math.max(0.1, Math.min(0.9, t));
 }
 
 /**
@@ -308,15 +318,60 @@ function assignSpecials(rng: Rng, cats: Cat[], counts: Record<Exclude<CatKind, '
   const order = rng.shuffle(cats.map((_, i) => i));
   const out = cats.map((c) => ({ ...c, kind: 'normal' as CatKind }));
   let p = 0;
-  for (const kind of ['spin', 'scared', 'sleepy'] as const) {
+  for (const kind of ['scared', 'sleepy'] as const) {
     for (let i = 0; i < counts[kind] && p < order.length; i++, p++) {
       const c = out[order[p]];
       c.kind = kind;
       if (kind === 'scared') c.dir = ((c.dir + 2) % 4) as Dir;
-      if (kind === 'spin') c.dir = rng.int(4) as Dir;
     }
   }
   return out;
+}
+
+/**
+ * Turns `count` plain cats into spin cats while keeping a known winning order: take the greedy
+ * order of the finished board; a cat that leaves at step t gets the starting direction that,
+ * after t quarter turns, points the way it originally left. That exact order still wins, but
+ * most other orders don't. Several picks are tried and the one whose random-play stuck rate is
+ * closest to the target is kept.
+ */
+function addSpinCats(rng: Rng, w: number, h: number, cats: Cat[], count: number, target: number): { cats: Cat[]; stuck: number } {
+  if (count <= 0) return { cats, stuck: 0 };
+  const order = greedyOrder(w, h, cats);
+  const step = new Map(order.map((id, t) => [id, t]));
+  const spin = (list: Cat[], id: number): Cat[] => list.map((c) => {
+    if (c.id !== id) return c;
+    const t = step.get(c.id)!;
+    return { ...c, kind: 'spin' as CatKind, dir: ((((c.dir - t) % 4) + 4) % 4) as Dir };
+  });
+  // Greedy pick: each new spin cat is the candidate that makes random play get stuck most often.
+  let cur = cats;
+  let curStuck = 0;
+  for (let slot = 0; slot < count; slot++) {
+    // Best spin cats are the ones standing in many others' way: when such a cat is turned the
+    // wrong way, everyone behind it waits, and a wrong order strands the whole group.
+    const grid = occupancy(w, h, cur);
+    const blocks = new Map<number, number>();
+    for (const c of cur) {
+      const b = firstBlocker(w, h, grid, c, dirAt(c, 0));
+      if (b !== -1) blocks.set(b, (blocks.get(b) ?? 0) + 1);
+    }
+    const pool = cur.filter((c) => (c.kind ?? 'normal') === 'normal')
+      .sort((a, b) => (blocks.get(b.id) ?? 0) - (blocks.get(a.id) ?? 0) || rng.next() - 0.5);
+    const plain = rng.shuffle(pool.slice(0, 8).map((c) => c.id)).slice(0, 5);
+    if (plain.length === 0) break;
+    let pick = cur, pickStuck = -1;
+    for (const id of plain) {
+      const next = spin(cur, id);
+      const st = stuckRate(w, h, next, rng, 12);
+      if (st > pickStuck) { pick = next; pickStuck = st; }
+    }
+    cur = pick;
+    curStuck = pickStuck;
+    // Stop early only when clearly past the target (single estimates are noisy).
+    if (curStuck >= target + 0.15 && slot >= 1) break;
+  }
+  return { cats: cur, stuck: stuckRate(w, h, cur, rng, 24) };
 }
 
 function goalFor(p: Params, cats: number): Goal {
@@ -346,10 +401,19 @@ export function generateLevel(n: number, salt = 0): Level {
   const counts = specialsFor(n, p.kind, best.length);
   best = assignSpecials(new Rng(hashSeed(n, salt, 0x73706563)), best, counts);
   best = harden(new Rng(hashSeed(n, salt, 0x68617264)), p.w, p.h, mask, best, p.harden, goalFor(p, best.length));
-  // Spin cats make you wait for the right moment, so they buy a little extra clock.
-  const extra = counts.spin * spinPeriodFor(n) * 1.5;
+  const depth = solve(p.w, p.h, best).depth;
+  // A few independent tries; keep the one whose stuck rate lands closest to the target.
+  const goalStuck = stuckTargetFor(n, p.kind);
+  let spun = addSpinCats(new Rng(hashSeed(n, salt, 0x7370696e)), p.w, p.h, best, counts.spin, goalStuck);
+  for (let tryNo = 1; tryNo < 3 && counts.spin > 0 && Math.abs(spun.stuck - goalStuck) > 0.2; tryNo++) {
+    const again = addSpinCats(new Rng(hashSeed(n, salt, 0x7370696e, tryNo)), p.w, p.h, best, counts.spin, goalStuck);
+    if (Math.abs(again.stuck - goalStuck) < Math.abs(spun.stuck - goalStuck)) spun = again;
+  }
+  best = spun.cats;
+  // Spin cats need thinking time, so each buys a few seconds of clock.
+  const extra = counts.spin * 3;
   const timeLimit = p.secPerCat > 0 ? Math.max(15, Math.round((best.length * p.secPerCat + extra) / 5) * 5) : null;
-  return { number: n, w: p.w, h: p.h, mask, cats: best, kind: p.kind, timeLimit, spinPeriod: spinPeriodFor(n) };
+  return { number: n, w: p.w, h: p.h, mask, cats: best, kind: p.kind, timeLimit, meta: { depth, stuckRate: spun.stuck } };
 }
 
 /** Daily puzzle: same board for everyone on a given UTC day. */

@@ -8,7 +8,7 @@ export const DY: readonly number[] = [-1, 0, 1, 0];
  * normal: runs the way it faces.
  * sleepy: curled up, direction hidden until tapped awake (waking is free).
  * scared: runs backwards, away from the way it faces.
- * spin:   turns 90° clockwise every few seconds; runs the way it faces at the moment of the tap.
+ * spin:   turns 90° clockwise every time any cat leaves, so the order of moves matters.
  */
 export type CatKind = 'normal' | 'sleepy' | 'scared' | 'spin';
 
@@ -38,8 +38,8 @@ export interface Level {
   kind: 'tutorial' | 'easy' | 'normal' | 'hard' | 'boss' | 'daily';
   /** Seconds, or null for untimed levels. */
   timeLimit: number | null;
-  /** Seconds between quarter turns of spin cats. */
-  spinPeriod: number;
+  /** How the generator rated this board (for tuning and tests). */
+  meta?: { depth: number; stuckRate: number };
 }
 
 export const idx = (w: number, x: number, y: number): number => y * w + x;

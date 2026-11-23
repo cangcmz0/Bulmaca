@@ -1,4 +1,5 @@
-import { Cat, Dir, DX, DY, exitDir, idx } from './types';
+import { Rng } from './rng';
+import { Cat, Dir, DX, DY, idx } from './types';
 
 /** Builds an occupancy grid: cell index -> cat id, or -1. */
 export function occupancy(w: number, h: number, cats: readonly Cat[]): Int32Array {
@@ -20,22 +21,25 @@ export function rayBlocker(w: number, h: number, grid: Int32Array, x0: number, y
   return -1;
 }
 
+/**
+ * Direction a cat runs after `exits` cats have left the board.
+ * Spin cats turn a quarter clockwise every time any cat leaves, so for them the order of moves
+ * matters: that is what turns "find a free cat" into a real planning puzzle.
+ */
+export function dirAt(c: Cat, exits: number): Dir {
+  if (c.kind === 'scared') return ((c.dir + 2) % 4) as Dir;
+  if (c.kind === 'spin') return ((c.dir + exits) % 4) as Dir;
+  return c.dir;
+}
+
 /** Returns the id of the first cat in this cat's path, or -1 if the way out is clear. */
-export function firstBlocker(w: number, h: number, grid: Int32Array, cat: Cat, dir: Dir = exitDir(cat)): number {
+export function firstBlocker(w: number, h: number, grid: Int32Array, cat: Cat, dir: Dir = dirAt(cat, 0)): number {
   return rayBlocker(w, h, grid, cat.x, cat.y, dir);
 }
 
-/**
- * Can this cat leave at some point given the current board? Spin cats only need one clear side,
- * since the player can wait for it to turn that way. Leaving only ever clears paths, so this
- * stays an exact, greedy solvability test with every cat kind.
- */
-export function canLeave(w: number, h: number, grid: Int32Array, cat: Cat): boolean {
-  if (cat.kind === 'spin') {
-    for (let d = 0 as Dir; d < 4; d = (d + 1) as Dir) if (rayBlocker(w, h, grid, cat.x, cat.y, d) === -1) return true;
-    return false;
-  }
-  return firstBlocker(w, h, grid, cat) === -1;
+export function freeCats(w: number, h: number, cats: readonly Cat[], exits = 0): Cat[] {
+  const grid = occupancy(w, h, cats);
+  return cats.filter((c) => firstBlocker(w, h, grid, c, dirAt(c, exits)) === -1);
 }
 
 export interface SolveResult {
@@ -47,7 +51,8 @@ export interface SolveResult {
 }
 
 /**
- * Removing a free cat only ever clears paths, so greedy peeling is an exact solvability test.
+ * Greedy peeling for boards without spin cats: removing a free cat only ever clears paths, so
+ * this is an exact solvability test there. Boards with spin cats need findSolution().
  */
 export function solve(w: number, h: number, cats: readonly Cat[]): SolveResult {
   const grid = occupancy(w, h, cats);
@@ -55,7 +60,7 @@ export function solve(w: number, h: number, cats: readonly Cat[]): SolveResult {
   let depth = 0;
   let blockedAtStart = 0;
   while (remaining.length > 0) {
-    const free = remaining.filter((c) => canLeave(w, h, grid, c));
+    const free = remaining.filter((c) => firstBlocker(w, h, grid, c) === -1);
     if (depth === 0) blockedAtStart = remaining.length - free.length;
     if (free.length === 0) return { solvable: false, depth, blockedAtStart };
     for (const c of free) grid[idx(w, c.x, c.y)] = -1;
@@ -66,7 +71,107 @@ export function solve(w: number, h: number, cats: readonly Cat[]): SolveResult {
   return { solvable: true, depth, blockedAtStart };
 }
 
-export function freeCats(w: number, h: number, cats: readonly Cat[]): Cat[] {
+/** Greedy wave order as one flat sequence of cat ids (boards without spin cats). */
+export function greedyOrder(w: number, h: number, cats: readonly Cat[]): number[] {
   const grid = occupancy(w, h, cats);
-  return cats.filter((c) => canLeave(w, h, grid, c));
+  let remaining = cats.slice();
+  const order: number[] = [];
+  while (remaining.length > 0) {
+    const free = remaining.filter((c) => firstBlocker(w, h, grid, c) === -1);
+    if (free.length === 0) break;
+    for (const c of free) { grid[idx(w, c.x, c.y)] = -1; order.push(c.id); }
+    const ids = new Set(free.map((c) => c.id));
+    remaining = remaining.filter((c) => !ids.has(c.id));
+  }
+  return order;
+}
+
+export interface Search {
+  /** Cat ids in a winning order, or null. */
+  path: number[] | null;
+  /** False when the node budget ran out before the search could finish. */
+  complete: boolean;
+}
+
+/**
+ * Depth-first search for a winning order, starting after `exits0` cats have already left.
+ * Once no spin cats remain the rest is solved greedily (order no longer matters), so the search
+ * only branches while spin cats are on the board. Failed states are memoised.
+ */
+export function findSolution(w: number, h: number, cats: readonly Cat[], exits0 = 0, limit = 30000): Search {
+  const n = cats.length;
+  const grid = new Int32Array(w * h).fill(-1);
+  cats.forEach((c, i) => (grid[idx(w, c.x, c.y)] = i));
+  const alive = new Uint8Array(n).fill(1);
+  let spinsLeft = cats.filter((c) => c.kind === 'spin').length;
+  const failed = new Set<string>();
+  const order: number[] = [];
+  let nodes = 0;
+  let outOfBudget = false;
+
+  const freeAt = (i: number, exits: number) =>
+    rayBlocker(w, h, grid, cats[i].x, cats[i].y, dirAt(cats[i], exits)) === -1;
+
+  const rec = (left: number, exits: number): boolean => {
+    if (left === 0) return true;
+    if (spinsLeft === 0) {
+      const rest: number[] = [];
+      for (let i = 0; i < n; i++) if (alive[i]) rest.push(i);
+      const sub = greedyOrder(w, h, rest.map((i) => ({ ...cats[i], id: i })));
+      if (sub.length !== rest.length) return false;
+      order.push(...sub);
+      return true;
+    }
+    if (++nodes > limit) { outOfBudget = true; return false; }
+    const key = String.fromCharCode(...alive);
+    if (failed.has(key)) return false;
+    // spin cats in their window first, then plain cats
+    const cand: number[] = [];
+    for (let i = 0; i < n; i++) if (alive[i] && cats[i].kind === 'spin' && freeAt(i, exits)) cand.push(i);
+    for (let i = 0; i < n; i++) if (alive[i] && cats[i].kind !== 'spin' && freeAt(i, exits)) cand.push(i);
+    for (const i of cand) {
+      const cell = idx(w, cats[i].x, cats[i].y);
+      alive[i] = 0; grid[cell] = -1; order.push(i);
+      if (cats[i].kind === 'spin') spinsLeft--;
+      if (rec(left - 1, exits + 1)) return true;
+      if (cats[i].kind === 'spin') spinsLeft++;
+      alive[i] = 1; grid[cell] = i; order.pop();
+      if (outOfBudget) return false;
+    }
+    failed.add(key);
+    return false;
+  };
+
+  const ok = rec(n, exits0);
+  return { path: ok ? order.map((i) => cats[i].id) : null, complete: ok || !outOfBudget };
+}
+
+/**
+ * Plays the board like a player who taps random free cats. Returns true if it got every cat
+ * out, false if it got stuck. Run many times, the stuck rate measures how much thinking a
+ * board demands.
+ */
+export function randomPlayout(w: number, h: number, cats: readonly Cat[], rng: Rng): boolean {
+  const grid = occupancy(w, h, cats);
+  const alive = cats.slice();
+  let exits = 0;
+  while (alive.length > 0) {
+    const free: number[] = [];
+    for (let i = 0; i < alive.length; i++) {
+      const c = alive[i];
+      if (firstBlocker(w, h, grid, c, dirAt(c, exits)) === -1) free.push(i);
+    }
+    if (free.length === 0) return false;
+    const k = free[rng.int(free.length)];
+    grid[idx(w, alive[k].x, alive[k].y)] = -1;
+    alive.splice(k, 1);
+    exits++;
+  }
+  return true;
+}
+
+export function stuckRate(w: number, h: number, cats: readonly Cat[], rng: Rng, runs = 24): number {
+  let stuck = 0;
+  for (let i = 0; i < runs; i++) if (!randomPlayout(w, h, cats, rng)) stuck++;
+  return stuck / runs;
 }

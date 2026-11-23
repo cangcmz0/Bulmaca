@@ -8,7 +8,7 @@
 - Capacitor Android projesi (yalnızca dikey ekran)
 
 ## ✅ v0.2: Sonsuz zorluk ve reklam anları
-- **8000 seviye:** zorluk 8000. seviyeye kadar kesintisiz artıyor. Tahta ~150. seviyede 9×11'e ulaşıyor, sonra "zincir" derinliği (0.40 → 0.72) ve süre baskısı (kedi başına 4.2 sn → 1.6 sn) 8000'e kadar artıyor. 8000. seviye son boss.
+- **8000 seviye** (v0.5'te 40.000 oldu): zorluk 8000. seviyeye kadar kesintisiz artıyor. Tahta ~150. seviyede 9×11'e ulaşıyor, sonra "zincir" derinliği (0.40 → 0.72) ve süre baskısı (kedi başına 4.2 sn → 1.6 sn) 8000'e kadar artıyor. 8000. seviye son boss.
 - **Usta Modu:** 8000'i bitirene final ekranı çıkıyor, sonrasında seviyeler en yüksek zorlukta sonsuza dek devam ediyor.
 - **Testere dişi zorluk:** her 10 seviye normal ×3, zor, normal ×2, zor, normal, kolay (nefes), boss şeklinde gidiyor.
 - **Süre:** 25. seviyeden itibaren zor ve boss seviyelerde, 150. seviyeden itibaren tüm seviyelerde. Zamanla sıkılaşıyor, kedi başına en az ~1.7 sn kalıyor.
@@ -39,7 +39,16 @@
 - Yeni isteğe bağlı reklam anları: günlük hediye (1 ipucu, reklamla 3), her 3 kazanmada bir "+1 ipucu"
 - **Giriş ekranı:** dokunulabilir canlı kedi sahnesi (zıplama, kalpler, uyanan uykucu), boss'a kalan seviye çubuğu, yıldız sayacı, günlük hediye
 
-## ⏭ v0.5: Mağazaya hazırlık
+## ✅ v0.5: Sıranın önemli olduğu gerçek bulmaca, 40.000 seviye
+- **Sorun:** önü açık kediyi kaçırmak her zaman doğru hamleydi, yani hiç plan gerekmiyordu ve oyuncu hiçbir zaman sıkışmıyordu.
+- **Çözüm:** 🌀 fırıldak kedi artık **herhangi bir kedi kaçtığında** 90° dönüyor. Yanlış sıra fırıldakları duvara çevirip oyuncuyu sıkıştırıyor. 8. seviyeden itibaren geliyor.
+- Üretici her seviyede en az bir kazanan sıra kalmasını sağlıyor: o sıra kurulumdan geliyor ve çözücü de doğruluyor. Fırıldaklar, başka kedilerin yolunu en çok kapatan kedilerden seçiliyor.
+- **Zorluk ölçüsü:** rastgele dokunan bir oyuncunun sıkışma oranı. Başta ~%20-30, 1000. seviyede ~%60-70, sonlara doğru %80-90.
+- Çözücü (derinlik öncelikli arama, başarısız konumları hatırlıyor) ipucu verirken kazanan bir hamle buluyor. Oyun artık kazanılamayacak durumdaysa ipucu harcamak yerine bunu söylüyor.
+- **Sıkışınca:** "Reklam izle, geri al". Oyun tek reklamla tekrar çözülebilir bir konuma geri dönüyor.
+- **40.000 seviye**, zorluk eğrisi 40.000'e kadar yayıldı. Sonrasında Usta Modu var.
+
+## ⏭ v0.6: Mağazaya hazırlık
 - [ ] **AdMob:** `@capacitor-community/admob` eklentisi. `src/platform/ads.ts` içinde aynı arayüzü kullanan bir `AdMobAds` sınıfı yazılacak. Önce test ID'leri, sonra gerçek ID'ler. GDPR onayı için UMP kullanılacak.
 - [ ] **"Reklamsız" satın alma:** Google Play Billing (`@capacitor-community/in-app-purchases` ya da RevenueCat)
 - [ ] Android geri tuşu (`@capacitor/app`), titreşim (`@capacitor/haptics`)

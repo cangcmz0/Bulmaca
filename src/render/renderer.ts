@@ -14,6 +14,8 @@ interface VCat {
   run: number;
   kind: CatKind;
   wakeAt: number;
+  /** Quarter turns shown for spin cats; eases towards the number of exits so far. */
+  turn: number;
   coat: number;
   phase: number;
   blinkAt: number;
@@ -78,7 +80,7 @@ export class BoardRenderer {
     const now = performance.now();
     for (const c of state.cats.values()) {
       this.vcats.set(c.id, {
-        id: c.id, cell: { x: c.x, y: c.y }, dir: c.dir, run: c.dir, kind: c.kind ?? 'normal', wakeAt: 0, coat: c.coat,
+        id: c.id, cell: { x: c.x, y: c.y }, dir: c.dir, run: c.dir, kind: c.kind ?? 'normal', wakeAt: 0, turn: state.exits, coat: c.coat,
         phase: Math.random() * Math.PI * 2, blinkAt: now + 1000 + Math.random() * 4000,
         mode: 'idle', t0: 0, reach: 0, shakeUntil: 0, hurtUntil: 0, dizzyUntil: 0, lastDust: 0, offset: 0,
       });
@@ -195,7 +197,11 @@ export class BoardRenderer {
     this.drawHint(now);
 
     const list = [...this.vcats.values()];
-    for (const v of list) this.update(v, now);
+    const exits = this.state.exits;
+    for (const v of list) {
+      if (v.kind === 'spin') v.turn += (exits - v.turn) * Math.min(1, dt * 12);
+      this.update(v, now);
+    }
     list.sort((a, b) => (a.mode === 'idle' ? 0 : 1) - (b.mode === 'idle' ? 0 : 1) || a.cell.y - b.cell.y);
     for (const v of list) this.drawVCat(v, now);
     ctx.restore();
@@ -209,17 +215,25 @@ export class BoardRenderer {
 
   private lockDir(v: VCat, run: Dir): void {
     v.run = run;
-    if (v.kind === 'spin') v.dir = run; // stop spinning, face the way it goes
   }
 
-  /** Current gaze angle in quarter turns; spin cats snap round right after each logical turn. */
+  /** Current gaze angle in quarter turns; spin cats swing round smoothly after each exit. */
   private gaze(v: VCat): number {
-    if (v.kind !== 'spin' || v.mode !== 'idle' || !this.state) return v.dir;
-    const turns = this.state.spinTurns();
-    const base = Math.floor(turns);
-    const frac = turns - base;
-    if (base === 0) return v.dir;
-    return v.dir + (frac < 0.15 ? base - 1 + easeOutBack(frac / 0.15) : base);
+    if (v.kind !== 'spin') return v.dir;
+    return v.mode === 'idle' ? v.dir + v.turn : v.run; // a moving spin cat faces where it goes
+  }
+
+  /** Brings a cat back after an undo, with a little pop. */
+  restore(cat: Cat): void {
+    const now = performance.now();
+    this.vcats.set(cat.id, {
+      id: cat.id, cell: { x: cat.x, y: cat.y }, dir: cat.dir, run: cat.dir, kind: cat.kind ?? 'normal',
+      wakeAt: now, turn: this.state?.exits ?? 0, coat: cat.coat,
+      phase: Math.random() * Math.PI * 2, blinkAt: now + 2000,
+      mode: 'idle', t0: 0, reach: 0, shakeUntil: 0, hurtUntil: 0, dizzyUntil: 0, lastDust: 0, offset: 0,
+    });
+    const { px, py } = this.center(cat.x, cat.y);
+    this.puff(px, py, 6);
   }
 
   // ---------------------------------------------------------------------------

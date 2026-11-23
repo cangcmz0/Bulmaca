@@ -16,27 +16,44 @@ describe('GameState', () => {
   });
 
   it('can be finished by always following hints, with no mistakes, with every cat kind', () => {
-    for (const n of [3, 17, 33, 55, 84, 120, 777, 7994]) {
+    for (const n of [3, 8, 17, 33, 55, 84, 120, 777, 7994, 39990]) {
       const g = new GameState(generateLevel(n));
       let guard = 5000;
       while (!g.won && guard-- > 0) {
-        const c = g.hint()!;
-        if (g.asleep.has(c.id)) expect(g.tap(c.x, c.y).kind).toBe('wake');
-        // wait for a spin cat to face a clear way, like a player would
-        for (let i = 0; i < 4 && c.kind === 'spin'; i++) {
-          const grid = [...g.cats.values()];
-          const d = g.runDir(c);
-          const blocked = grid.some((o) => o.id !== c.id &&
-            ((d === 0 && o.x === c.x && o.y < c.y) || (d === 2 && o.x === c.x && o.y > c.y) ||
-             (d === 1 && o.y === c.y && o.x > c.x) || (d === 3 && o.y === c.y && o.x < c.x)));
-          if (!blocked) break;
-          g.advance(g.level.spinPeriod * 1.001); // a hair over one turn, avoids float rounding
-        }
-        expect(g.tap(c.x, c.y).kind, `level ${g.level.number}`).toBe('exit');
+        const h = g.hint();
+        expect(h.kind, `level ${n}`).toBe('move');
+        if (h.kind !== 'move') break;
+        if (g.asleep.has(h.cat.id)) expect(g.tap(h.cat.x, h.cat.y).kind).toBe('wake');
+        expect(g.tap(h.cat.x, h.cat.y).kind, `level ${n}`).toBe('exit');
       }
       expect(g.won).toBe(true);
       expect(g.stars()).toBe(3);
     }
+  });
+
+  it('gets stuck with a careless order, and undo gets it back', () => {
+    // Play random free cats until the board is stuck on a level built to punish that.
+    const lvl = generateLevel(1000);
+    let stuckSeen = false;
+    for (let attempt = 0; attempt < 20 && !stuckSeen; attempt++) {
+      const g = new GameState(lvl);
+      g.asleep.clear();
+      let r = attempt * 7919;
+      while (!g.won && !g.stuck) {
+        const free = g.free();
+        const c = free[(r = (r * 1103515245 + 12345) >>> 0) % free.length];
+        g.tap(c.x, c.y);
+      }
+      if (g.stuck) {
+        stuckSeen = true;
+        expect(g.loseReason).toBe('stuck');
+        expect(g.hint().kind).toBe('doomed');
+        // rewind until winnable again
+        while (g.hint().kind === 'doomed') expect(g.undo()).toBeDefined();
+        expect(g.stuck).toBe(false);
+      }
+    }
+    expect(stuckSeen).toBe(true);
   });
 
   it('loses after running out of lives', () => {
@@ -74,12 +91,17 @@ describe('GameState', () => {
     expect(g2.runDir(scared)).toBe((scared.dir + 2) % 4);
   });
 
-  it('spin cats turn a quarter every period', () => {
+  it('spin cats turn a quarter every time a cat leaves', () => {
     const lvl = generateLevel(INTRO.spin);
     const spin = lvl.cats.find((c) => c.kind === 'spin')!;
     const g = new GameState(lvl);
     expect(g.runDir(spin)).toBe(spin.dir);
-    g.advance(lvl.spinPeriod * 1.01);
-    expect(g.runDir(spin)).toBe((spin.dir + 1) % 4);
+    const h = g.hint();
+    if (h.kind === 'move' && h.cat.id !== spin.id) {
+      g.tap(h.cat.x, h.cat.y);
+      expect(g.runDir(spin)).toBe((spin.dir + 1) % 4);
+      g.undo();
+      expect(g.runDir(spin)).toBe(spin.dir);
+    }
   });
 });
