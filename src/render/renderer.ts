@@ -1,6 +1,6 @@
 import { GameState } from '../core/game';
-import { Cat, DX, DY, idx } from '../core/types';
-import { COATS, CatPose, drawCat } from './cat';
+import { Cat, CatKind, Dir, DX, DY, idx } from '../core/types';
+import { COATS, CatPose, drawCat, drawSleepy, drawSpinRing } from './cat';
 import { Theme } from './theme';
 
 type Mode = 'idle' | 'exit' | 'bump';
@@ -8,7 +8,12 @@ type Mode = 'idle' | 'exit' | 'bump';
 interface VCat {
   id: number;
   cell: { x: number; y: number };
+  /** Where the cat looks (spin cats: starting direction). */
   dir: number;
+  /** Where the cat moves once tapped; differs from dir for scared cats. */
+  run: number;
+  kind: CatKind;
+  wakeAt: number;
   coat: number;
   phase: number;
   blinkAt: number;
@@ -28,8 +33,9 @@ interface Particle {
   x: number; y: number; vx: number; vy: number;
   life: number; max: number;
   color: string; size: number;
-  kind: 'dust' | 'confetti' | 'star';
+  kind: 'dust' | 'confetti' | 'star' | 'text';
   rot: number; vr: number;
+  text?: string;
 }
 
 const EXIT_V0 = 7; // cells/s
@@ -56,6 +62,7 @@ export class BoardRenderer {
   private hintId = -1;
   private hintUntil = 0;
   private last = performance.now();
+  private flashUntil = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -71,7 +78,7 @@ export class BoardRenderer {
     const now = performance.now();
     for (const c of state.cats.values()) {
       this.vcats.set(c.id, {
-        id: c.id, cell: { x: c.x, y: c.y }, dir: c.dir, coat: c.coat,
+        id: c.id, cell: { x: c.x, y: c.y }, dir: c.dir, run: c.dir, kind: c.kind ?? 'normal', wakeAt: 0, coat: c.coat,
         phase: Math.random() * Math.PI * 2, blinkAt: now + 1000 + Math.random() * 4000,
         mode: 'idle', t0: 0, reach: 0, shakeUntil: 0, hurtUntil: 0, dizzyUntil: 0, lastDust: 0, offset: 0,
       });
@@ -108,9 +115,10 @@ export class BoardRenderer {
     return this.state.isActive(x, y) ? { x, y } : null;
   }
 
-  exit(cat: Cat): void {
+  exit(cat: Cat, dir: Dir): void {
     const v = this.vcats.get(cat.id);
     if (!v) return;
+    this.lockDir(v, dir);
     v.mode = 'exit';
     v.t0 = performance.now();
     if (this.hintId === cat.id) this.hintId = -1;
@@ -118,12 +126,34 @@ export class BoardRenderer {
     this.puff(px, py, 6);
   }
 
-  bump(cat: Cat, steps: number): void {
+  bump(cat: Cat, dir: Dir, steps: number): void {
     const v = this.vcats.get(cat.id);
     if (!v || v.mode !== 'idle') return;
+    this.lockDir(v, dir);
     v.mode = 'bump';
     v.t0 = performance.now();
     v.reach = steps + 0.32;
+  }
+
+  wake(cat: Cat): void {
+    const v = this.vcats.get(cat.id);
+    if (!v) return;
+    v.wakeAt = performance.now();
+    const { px, py } = this.center(v.cell.x, v.cell.y);
+    this.puff(px, py, 4);
+    this.floatText(px, py - this.cs * 0.5, '!', '#ffcf4a', 0.6);
+  }
+
+  /** Floating label, e.g. combo callouts. Positions are canvas px. */
+  floatText(x: number, y: number, text: string, color: string, size = 0.45): void {
+    this.particles.push({
+      x, y, vx: 0, vy: -55, life: 0, max: 0.9, color, size: Math.max(16, this.cs * size),
+      kind: 'text', rot: 0, vr: 0, text,
+    });
+  }
+
+  cellCenter(x: number, y: number): { px: number; py: number } {
+    return this.center(x, y);
   }
 
   hint(cat: Cat): void {
@@ -131,8 +161,9 @@ export class BoardRenderer {
     this.hintUntil = performance.now() + 4000;
   }
 
-  celebrate(): void {
-    for (let i = 0; i < 120; i++) {
+  celebrate(big = false): void {
+    if (big) this.flashUntil = performance.now() + 260;
+    for (let i = 0; i < (big ? 220 : 120); i++) {
       this.particles.push({
         x: this.W * Math.random(), y: -20 - Math.random() * this.H * 0.4,
         vx: (Math.random() - 0.5) * 120, vy: 80 + Math.random() * 160,
@@ -170,6 +201,25 @@ export class BoardRenderer {
     ctx.restore();
 
     this.drawParticles(dt);
+    if (now < this.flashUntil) {
+      ctx.fillStyle = `rgba(255,255,255,${(0.55 * (this.flashUntil - now)) / 260})`;
+      ctx.fillRect(0, 0, this.W, this.H);
+    }
+  }
+
+  private lockDir(v: VCat, run: Dir): void {
+    v.run = run;
+    if (v.kind === 'spin') v.dir = run; // stop spinning, face the way it goes
+  }
+
+  /** Current gaze angle in quarter turns; spin cats snap round right after each logical turn. */
+  private gaze(v: VCat): number {
+    if (v.kind !== 'spin' || v.mode !== 'idle' || !this.state) return v.dir;
+    const turns = this.state.spinTurns();
+    const base = Math.floor(turns);
+    const frac = turns - base;
+    if (base === 0) return v.dir;
+    return v.dir + (frac < 0.15 ? base - 1 + easeOutBack(frac / 0.15) : base);
   }
 
   // ---------------------------------------------------------------------------
@@ -182,10 +232,10 @@ export class BoardRenderer {
     const t = (now - v.t0) / 1000;
     if (v.mode === 'exit') {
       v.offset = EXIT_V0 * t + 0.5 * EXIT_ACC * t * t;
-      const { px, py } = this.center(v.cell.x + DX[v.dir] * v.offset, v.cell.y + DY[v.dir] * v.offset);
+      const { px, py } = this.center(v.cell.x + DX[v.run] * v.offset, v.cell.y + DY[v.run] * v.offset);
       if (now - v.lastDust > 45) {
         v.lastDust = now;
-        this.puff(px - DX[v.dir] * this.cs * 0.4, py - DY[v.dir] * this.cs * 0.4, 1);
+        this.puff(px - DX[v.run] * this.cs * 0.4, py - DY[v.run] * this.cs * 0.4, 1);
       }
       const m = this.cs;
       if (px < -m || py < -m || px > this.W + m || py > this.H + m) this.vcats.delete(v.id);
@@ -208,8 +258,8 @@ export class BoardRenderer {
     v.dizzyUntil = now + 900;
     this.shakeUntil = now + 250;
     const { px, py } = this.center(
-      v.cell.x + DX[v.dir] * (v.reach + 0.3),
-      v.cell.y + DY[v.dir] * (v.reach + 0.3),
+      v.cell.x + DX[v.run] * (v.reach + 0.3),
+      v.cell.y + DY[v.run] * (v.reach + 0.3),
     );
     // shake the cat that was hit
     for (const o of this.vcats.values()) {
@@ -227,7 +277,7 @@ export class BoardRenderer {
 
   private drawVCat(v: VCat, now: number): void {
     const cs = this.cs;
-    const { px, py } = this.center(v.cell.x + DX[v.dir] * v.offset, v.cell.y + DY[v.dir] * v.offset);
+    const { px, py } = this.center(v.cell.x + DX[v.run] * v.offset, v.cell.y + DY[v.run] * v.offset);
     let sx = 0;
     if (now < v.shakeUntil) sx = Math.sin(now / 20) * cs * 0.06 * ((v.shakeUntil - now) / 350);
     const idle = v.mode === 'idle';
@@ -236,22 +286,32 @@ export class BoardRenderer {
     if (v.mode === 'exit') stretch = (now - v.t0) < 60 ? 0.86 : 1.14;
     if (v.mode === 'bump') stretch = 1.08;
     const hinted = this.hintId === v.id && now < this.hintUntil;
+    const coat = COATS[v.coat % COATS.length];
+    const wake = now - v.wakeAt < 400 ? Math.sin((Math.PI * (now - v.wakeAt)) / 400) * 0.25 : 0;
+    if (idle && v.kind === 'sleepy' && this.state?.asleep.has(v.id)) {
+      drawSleepy(this.ctx, coat, px + sx, py, cs * 0.9, now / 1000 + v.phase, hinted ? 1 + Math.sin(now / 120) * 0.05 : breathe);
+      return;
+    }
+    if (idle && v.kind === 'spin') drawSpinRing(this.ctx, px, py, cs, now / 1000, this.theme.accent);
     const pose: CatPose = {
-      x: px + sx, y: py, s: cs * 0.9, angle: (v.dir * Math.PI) / 2,
-      stretch, scale: breathe * (hinted ? 1 + Math.sin(now / 120) * 0.05 : 1),
+      x: px + sx, y: py, s: cs * 0.9, angle: (this.gaze(v) * Math.PI) / 2,
+      sweat: v.kind === 'scared',
+      stretch, scale: (breathe + wake) * (hinted ? 1 + Math.sin(now / 120) * 0.05 : 1),
       blink: idle && now > v.blinkAt && now < v.blinkAt + 140,
       dizzy: now < v.dizzyUntil,
       hurt: now < v.hurtUntil ? (v.hurtUntil - now) / 600 : 0,
       tail: Math.sin(now / (v.mode === 'idle' ? 520 : 90) + v.phase) * 0.35,
       running: v.mode === 'idle' ? 0 : 1,
     };
-    drawCat(this.ctx, COATS[v.coat % COATS.length], pose);
+    drawCat(this.ctx, coat, pose);
   }
 
   private drawHint(now: number): void {
     if (this.hintId < 0 || now > this.hintUntil) return;
     const v = this.vcats.get(this.hintId);
-    if (!v || v.mode !== 'idle') return;
+    const cat = this.state?.cats.get(this.hintId);
+    if (!v || !cat || v.mode !== 'idle') return;
+    const d = this.state!.runDir(cat);
     const ctx = this.ctx;
     const { px, py } = this.center(v.cell.x, v.cell.y);
     const pulse = (now % 900) / 900;
@@ -266,11 +326,11 @@ export class BoardRenderer {
     ctx.lineDashOffset = -now / 25;
     ctx.lineWidth = Math.max(3, this.cs * 0.07);
     const { w, h } = this.state!.level;
-    const ex = DX[v.dir] > 0 ? w : DX[v.dir] < 0 ? -1 : v.cell.x;
-    const ey = DY[v.dir] > 0 ? h : DY[v.dir] < 0 ? -1 : v.cell.y;
+    const ex = DX[d] > 0 ? w : DX[d] < 0 ? -1 : v.cell.x;
+    const ey = DY[d] > 0 ? h : DY[d] < 0 ? -1 : v.cell.y;
     const end = this.center(ex, ey);
     ctx.beginPath();
-    ctx.moveTo(px + DX[v.dir] * this.cs * 0.45, py + DY[v.dir] * this.cs * 0.45);
+    ctx.moveTo(px + DX[d] * this.cs * 0.45, py + DY[d] * this.cs * 0.45);
     ctx.lineTo(end.px, end.py);
     ctx.stroke();
     ctx.setLineDash([]);
@@ -311,6 +371,19 @@ export class BoardRenderer {
         ctx.fillStyle = p.color;
         ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
         ctx.restore();
+      } else if (p.kind === 'text') {
+        p.vy *= 0.94;
+        const pop = p.life < 0.12 ? 0.6 + (p.life / 0.12) * 0.5 : 1.1 - Math.min(0.1, (p.life - 0.12));
+        ctx.globalAlpha = Math.min(1, k * 2.5);
+        ctx.font = `600 ${p.size * pop}px Fredoka, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = Math.max(3, p.size * 0.18);
+        ctx.strokeStyle = '#4a3530';
+        ctx.strokeText(p.text!, p.x, p.y);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text!, p.x, p.y);
       } else {
         p.vy += 300 * dt;
         ctx.globalAlpha = k;

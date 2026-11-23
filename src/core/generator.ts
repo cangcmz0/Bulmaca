@@ -1,6 +1,6 @@
 import { Rng, hashSeed } from './rng';
 import { solve } from './solver';
-import { Cat, Dir, DX, DY, Level, idx } from './types';
+import { Cat, CatKind, Dir, DX, DY, Level, idx } from './types';
 
 export const COAT_COUNT = 6;
 
@@ -192,7 +192,7 @@ function tutorial(n: number): Level | null {
       { id: 1, x: 1, y: 1, dir: 1, coat: 2 },
       { id: 2, x: 2, y: 1, dir: 1, coat: 4 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null, spinPeriod: 1.8 };
   }
   if (n === 2) {
     const w = 3, h = 4;
@@ -203,7 +203,7 @@ function tutorial(n: number): Level | null {
       { id: 3, x: 2, y: 2, dir: 1, coat: 0 },
       { id: 4, x: 1, y: 3, dir: 3, coat: 2 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null, spinPeriod: 1.8 };
   }
   return null;
 }
@@ -240,6 +240,52 @@ function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], bu
   return cur;
 }
 
+/** Level where each special cat first appears (a normal level, never a boss). */
+export const INTRO: Record<Exclude<CatKind, 'normal'>, number> = { sleepy: 31, scared: 51, spin: 81 };
+
+export function spinPeriodFor(n: number): number {
+  const m = Math.min(n, TOTAL_LEVELS);
+  return Math.max(0.9, 1.8 - 0.1 * Math.log2(1 + m / INTRO.spin));
+}
+
+/** How many of each special cat a level gets. Shares grow slowly to level 8000. */
+export function specialsFor(n: number, kind: LevelKind, cats: number): Record<Exclude<CatKind, 'normal'>, number> {
+  const m = Math.min(n, TOTAL_LEVELS);
+  if (n === INTRO.sleepy) return { sleepy: 3, scared: 0, spin: 0 };
+  if (n === INTRO.scared) return { sleepy: 0, scared: 3, spin: 0 };
+  if (n === INTRO.spin) return { sleepy: 0, scared: 0, spin: 1 };
+  const k = kind === 'easy' ? 0.5 : kind === 'hard' ? 1.2 : kind === 'boss' ? 1.35 : 1;
+  const share = (start: number, base: number, slope: number, cap: number) =>
+    n < start ? 0 : Math.min(cap, (base + slope * Math.log2(1 + m / start)) * k);
+  const sleepy = Math.round(cats * share(INTRO.sleepy, 0.07, 0.035, 0.3));
+  const scared = Math.round(cats * share(INTRO.scared, 0.05, 0.03, 0.25));
+  let spin = 0;
+  if (n > INTRO.spin && kind !== 'easy') {
+    spin = Math.min(6, 1 + Math.floor(1.2 * Math.log2(1 + m / INTRO.spin))) + (kind === 'hard' ? 1 : kind === 'boss' ? 2 : 0);
+  }
+  return { sleepy, scared, spin: Math.min(spin, 8) };
+}
+
+/**
+ * Turns some cats special after the board is built. Scared cats get their gaze flipped so their
+ * real escape route is unchanged; spin cats can only get easier to free; sleepy cats only hide
+ * information. None of it can make a solvable board unsolvable.
+ */
+function assignSpecials(rng: Rng, cats: Cat[], counts: Record<Exclude<CatKind, 'normal'>, number>): Cat[] {
+  const order = rng.shuffle(cats.map((_, i) => i));
+  const out = cats.map((c) => ({ ...c, kind: 'normal' as CatKind }));
+  let p = 0;
+  for (const kind of ['spin', 'scared', 'sleepy'] as const) {
+    for (let i = 0; i < counts[kind] && p < order.length; i++, p++) {
+      const c = out[order[p]];
+      c.kind = kind;
+      if (kind === 'scared') c.dir = ((c.dir + 2) % 4) as Dir;
+      if (kind === 'spin') c.dir = rng.int(4) as Dir;
+    }
+  }
+  return out;
+}
+
 export function generateLevel(n: number, salt = 0): Level {
   const t = salt === 0 ? tutorial(n) : null;
   if (t) return t;
@@ -257,8 +303,12 @@ export function generateLevel(n: number, salt = 0): Level {
   }
   const target = Math.max(2, Math.round(best.length * p.chain));
   best = harden(new Rng(hashSeed(n, salt, 0x68617264)), p.w, p.h, mask, best, p.harden, target);
-  const timeLimit = p.secPerCat > 0 ? Math.max(15, Math.round((best.length * p.secPerCat) / 5) * 5) : null;
-  return { number: n, w: p.w, h: p.h, mask, cats: best, kind: p.kind, timeLimit };
+  const counts = specialsFor(n, p.kind, best.length);
+  best = assignSpecials(new Rng(hashSeed(n, salt, 0x73706563)), best, counts);
+  // Spin cats make you wait for the right moment, so they buy a little extra clock.
+  const extra = counts.spin * spinPeriodFor(n) * 1.5;
+  const timeLimit = p.secPerCat > 0 ? Math.max(15, Math.round((best.length * p.secPerCat + extra) / 5) * 5) : null;
+  return { number: n, w: p.w, h: p.h, mask, cats: best, kind: p.kind, timeLimit, spinPeriod: spinPeriodFor(n) };
 }
 
 /** Daily puzzle: same board for everyone on a given UTC day. */

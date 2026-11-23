@@ -4,13 +4,14 @@ import '@fontsource/fredoka/latin-600.css';
 import '@fontsource/fredoka/latin-ext-600.css';
 import './style.css';
 import { GameState } from './core/game';
-import { TOTAL_LEVELS, dailyLevel, generateLevel, kindFor } from './core/generator';
+import { INTRO, TOTAL_LEVELS, dailyLevel, generateLevel, kindFor } from './core/generator';
+import type { Cat, CatKind } from './core/types';
 import { Key, LANG, t } from './i18n';
 import { ads } from './platform/ads';
 import { sfx, vibrate } from './platform/audio';
 import { MONET, pacing } from './platform/monetization';
 import { load, save, todayKey, yesterdayKey } from './platform/storage';
-import { COATS, drawCat } from './render/cat';
+import { COATS, drawCat, drawSleepy } from './render/cat';
 import { BoardRenderer } from './render/renderer';
 import { applyTheme, themeFor } from './render/theme';
 import { icons } from './ui/icons';
@@ -33,6 +34,9 @@ let winPending = false;
 let clockStartsAt = 0;
 /** Failed attempts per level this session, used to offer "skip level". */
 const fails = new Map<number, number>();
+let combo = 0;
+let lastExitAt = 0;
+let levelStartedAt = 0;
 
 // ---------------------------------------------------------------- screens
 
@@ -89,6 +93,47 @@ function startLevel(n: number): void {
   renderHints();
   renderKind();
   renderTimer();
+  renderWake();
+  combo = 0;
+  levelStartedAt = performance.now();
+  if (!isDaily) maybeIntro(n);
+}
+
+const INTRO_TEXT: Record<Exclude<CatKind, 'normal'>, [Key, Key]> = {
+  sleepy: ['newSleepyTitle', 'newSleepyText'],
+  scared: ['newScaredTitle', 'newScaredText'],
+  spin: ['newSpinTitle', 'newSpinText'],
+};
+
+/** First time a special cat shows up, explain it on a card (the clock waits while it is open). */
+function maybeIntro(n: number): void {
+  const kind = (Object.keys(INTRO) as (keyof typeof INTRO)[]).find((k) => INTRO[k] === n);
+  if (!kind || data.seenKinds.includes(kind)) return;
+  data.seenKinds.push(kind);
+  save(data);
+  const [title, text] = INTRO_TEXT[kind];
+  openModal('<canvas class="intro-art" id="intro-art" width="240" height="240"></canvas>', t(title), t(text), [
+    { label: t('gotIt'), primary: true, run: closeModal },
+  ]);
+  const c = $<HTMLCanvasElement>('intro-art');
+  const ctx = c.getContext('2d')!;
+  const coat = COATS[kind === 'sleepy' ? 1 : kind === 'scared' ? 2 : 0];
+  if (kind === 'sleepy') drawSleepy(ctx, coat, 120, 125, 200, 0.4, 1);
+  else drawCat(ctx, coat, {
+    x: 120, y: 128, s: 190, angle: kind === 'spin' ? Math.PI / 4 : 0, stretch: 1, scale: 1, blink: false,
+    dizzy: false, hurt: 0, tail: 0.2, running: 0, sweat: kind === 'scared',
+  });
+}
+
+function renderWake(): void {
+  $('wake-btn').classList.toggle('hidden', !state || state.asleep.size === 0);
+}
+
+function comboText(n: number): string | null {
+  if (n >= 10) return `${t('combo10')} x${n}!`;
+  if (n >= 6) return `${t('combo6')} x${n}!`;
+  if (n >= 3) return `${t('combo3')} x${n}!`;
+  return null;
 }
 
 function renderKind(): void {
@@ -179,14 +224,28 @@ $('board').addEventListener('pointerdown', (e) => {
   const cat = state.catAt(cell.x, cell.y);
   if (!cat || renderer.isMoving(cat.id)) return;
   const res = state.tap(cell.x, cell.y);
-  if (res.kind === 'exit') {
-    renderer.exit(res.cat);
+  if (res.kind === 'wake') {
+    renderer.wake(res.cat);
+    sfx.hint();
+    vibrate(10);
+    renderWake();
+  } else if (res.kind === 'exit') {
+    renderer.exit(res.cat, res.dir);
     sfx.pop();
     vibrate(8);
     renderProgress();
+    const now = performance.now();
+    combo = now - lastExitAt < 1600 ? combo + 1 : 1;
+    lastExitAt = now;
+    const label = comboText(combo);
+    if (label) {
+      const { px, py } = renderer.cellCenter(res.cat.x, res.cat.y);
+      renderer.floatText(px, py - 20, label, combo >= 10 ? '#ff6fa8' : combo >= 6 ? '#ffcf4a' : '#ffffff');
+    }
     if (state.won) winPending = true;
   } else if (res.kind === 'bump') {
-    renderer.bump(res.cat, res.steps);
+    combo = 0;
+    renderer.bump(res.cat, res.dir, res.steps);
     const delay = Math.max(60, (res.steps / 16) * 1000);
     window.setTimeout(() => { sfx.meow(); vibrate(60); renderHearts(state!.lives); }, delay);
     if (state.level.number === 1) setTip('tutorial2');
@@ -200,8 +259,12 @@ function finishWin(): void {
   const stars = state.stars();
   const n = state.level.number;
   const boss = state.level.kind === 'boss';
-  renderer.celebrate();
+  const perfect = state.mistakes === 0;
+  const secs = Math.round((performance.now() - levelStartedAt) / 1000);
+  const statsLine = `⏱ ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${state.mistakes} ${t('mistakesWord')}`;
+  renderer.celebrate(boss || perfect);
   sfx.win();
+  if (perfect) window.setTimeout(() => sfx.win(), 380);
   if (isDaily) {
     const today = todayKey();
     if (data.dailyDone !== today) {
@@ -218,7 +281,8 @@ function finishWin(): void {
   save(data);
   renderHints();
   window.setTimeout(() => {
-    const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('');
+    const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('') +
+      `<div class="stats">${statsLine}</div>`;
     if (n === TOTAL_LEVELS) {
       openModal(art, t('finalTitle'), t('finalText'), [
         { label: t('toMaster'), primary: true, run: () => void nextLevel(n + 1) },
@@ -247,7 +311,7 @@ function finishWin(): void {
         { label: t('next'), run: () => void nextLevel(n + 1) },
       ]);
     } else {
-      openModal(art, t('winTitle'), '', [
+      openModal(art, perfect ? t('perfect') : t('winTitle'), '', [
         { label: t('next'), primary: true, run: () => void nextLevel(n + 1) },
         { label: t('home'), run: goHome },
       ]);
@@ -353,6 +417,25 @@ $('hint-btn').addEventListener('click', () => {
   ]);
 });
 
+$('wake-btn').addEventListener('click', () => {
+  sfx.unlock();
+  if (!state || state.asleep.size === 0) return;
+  openModal('<span class="big-emoji">😴</span>', t('wakeAllTitle'), t('wakeAllText'), [
+    {
+      label: t('watchWake'), primary: true,
+      run: async () => {
+        closeModal();
+        if (state && (await watchRewarded())) {
+          state.wakeAll().forEach((c: Cat) => renderer.wake(c));
+          renderWake();
+          sfx.hint();
+        }
+      },
+    },
+    { label: t('cancel'), run: closeModal },
+  ]);
+});
+
 function goHome(): void {
   closeModal();
   state = null;
@@ -407,6 +490,7 @@ function loop(now: number): void {
   renderer.frame(now);
   if (winPending && renderer.catsVisible === 0) finishWin();
   if (state && clockRunning(now)) {
+    state.advance(dt);
     if (state.tick(dt)) showLose();
     renderTimer();
   }

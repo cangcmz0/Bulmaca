@@ -19,7 +19,16 @@
   - İki geçiş reklamı arasında en az 45 sn oluyor.
   - Ödüllü reklam izleyene 60 sn boyunca geçiş reklamı gösterilmiyor.
 
-## ⏭ v0.3: Mağazaya hazırlık
+## ✅ v0.3: Kafa karıştıran kediler ve bitirme hissi
+- 😴 **Uykucu kedi** (31. seviyeden): yönü gizli, dokununca bedavaya uyanır. Hafıza ister.
+- 😰 **Korkak kedi** (51. seviyeden): baktığı yönün tersine kaçar.
+- 🌀 **Fırıldak kedi** (81. seviyeden): her ~1.8 sn'de 90° döner (8000'e doğru ~1 sn'ye iner). Doğru anı yakalamak gerekir.
+- Bu kedilerin oranı 8000'e kadar yavaş yavaş artıyor. Hiçbiri çözülebilir bir tahtayı çözülemez yapamıyor (testli).
+- Her yeni kedi ilk çıktığında bir tanıtım kartı gösteriliyor.
+- Yeni ödüllü reklam anı: "Hepsini uyandır"
+- **Bitirme hissi:** "Süper/Muhteşem/Efsane xN" kombo yazıları, "Kusursuz!" ekranı (çift melodi, ekran parlaması, büyük konfeti), süre ve hata istatistiği
+
+## ⏭ v0.4: Mağazaya hazırlık
 - [ ] **AdMob:** `@capacitor-community/admob` eklentisi. `src/platform/ads.ts` içinde aynı arayüzü kullanan bir `AdMobAds` sınıfı yazılacak. Önce test ID'leri, sonra gerçek ID'ler. GDPR onayı için UMP kullanılacak.
 - [ ] **"Reklamsız" satın alma:** Google Play Billing (`@capacitor-community/in-app-purchases` ya da RevenueCat)
 - [ ] Android geri tuşu (`@capacitor/app`), titreşim (`@capacitor/haptics`)

@@ -8,6 +8,8 @@ export interface SaveData {
   dailyDone: string | null;
   streak: number;
   levelsSinceAd: number;
+  /** Special cat kinds whose intro card has been shown. */
+  seenKinds: string[];
 }
 
 const KEY = 'kedi-kacisi-save-v1';
@@ -21,6 +23,7 @@ const DEFAULTS: SaveData = {
   dailyDone: null,
   streak: 0,
   levelsSinceAd: 0,
+  seenKinds: [],
 };
 
 export function load(): SaveData {

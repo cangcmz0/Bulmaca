@@ -1,12 +1,13 @@
 import { firstBlocker, freeCats, occupancy } from './solver';
-import { Cat, DX, DY, Level, idx } from './types';
+import { Cat, DX, DY, Dir, Level, exitDir, idx } from './types';
 
 export const START_LIVES = 3;
 
 export type TapResult =
   | { kind: 'none' }
-  | { kind: 'exit'; cat: Cat }
-  | { kind: 'bump'; cat: Cat; blocker: Cat; /** cells the cat travels before hitting */ steps: number };
+  | { kind: 'wake'; cat: Cat }
+  | { kind: 'exit'; cat: Cat; dir: Dir }
+  | { kind: 'bump'; cat: Cat; dir: Dir; blocker: Cat; /** cells the cat travels before hitting */ steps: number };
 
 /** Pure game rules, no rendering. The renderer animates whatever this returns. */
 export class GameState {
@@ -17,12 +18,38 @@ export class GameState {
   readonly total: number;
   /** Seconds left on timed levels, null when untimed. */
   timeLeft: number | null;
+  /** Ids of sleepy cats that have not been woken yet. */
+  asleep: Set<number>;
+  /** Play time that drives spin cats; only advances while the board is live. */
+  spinClock = 0;
 
   constructor(level: Level) {
     this.level = level;
     this.cats = new Map(level.cats.map((c) => [c.id, { ...c }]));
     this.total = level.cats.length;
     this.timeLeft = level.timeLimit;
+    this.asleep = new Set(level.cats.filter((c) => c.kind === 'sleepy').map((c) => c.id));
+  }
+
+  /** Quarter turns a spin cat has made so far, as a float (for smooth drawing). */
+  spinTurns(): number {
+    return this.spinClock / this.level.spinPeriod;
+  }
+
+  /** The direction this cat would run if tapped right now. */
+  runDir(c: Cat): Dir {
+    if (c.kind === 'spin') return ((c.dir + Math.floor(this.spinTurns())) % 4) as Dir;
+    return exitDir(c);
+  }
+
+  advance(dt: number): void {
+    if (!this.won && !this.lost) this.spinClock += dt;
+  }
+
+  wakeAll(): Cat[] {
+    const woken = [...this.asleep].map((id) => this.cats.get(id)).filter((c): c is Cat => !!c);
+    this.asleep.clear();
+    return woken;
   }
 
   get won(): boolean {
@@ -60,19 +87,24 @@ export class GameState {
     if (this.won || this.lost) return { kind: 'none' };
     const cat = this.catAt(x, y);
     if (!cat) return { kind: 'none' };
+    if (this.asleep.has(cat.id)) {
+      this.asleep.delete(cat.id);
+      return { kind: 'wake', cat };
+    }
     const { w, h } = this.level;
     const list = [...this.cats.values()];
     const grid = occupancy(w, h, list);
-    const blockerId = firstBlocker(w, h, grid, cat);
+    const dir = this.runDir(cat);
+    const blockerId = firstBlocker(w, h, grid, cat, dir);
     if (blockerId === -1) {
       this.cats.delete(cat.id);
-      return { kind: 'exit', cat };
+      return { kind: 'exit', cat, dir };
     }
     const blocker = this.cats.get(blockerId)!;
     const steps = Math.abs(blocker.x - cat.x) + Math.abs(blocker.y - cat.y) - 1;
     this.lives--;
     this.mistakes++;
-    return { kind: 'bump', cat, blocker, steps };
+    return { kind: 'bump', cat, dir, blocker, steps };
   }
 
   /** A cat that can leave right now (any free cat is always a safe move). */
@@ -82,16 +114,18 @@ export class GameState {
     // Prefer the free cat that unblocks the most others, it feels like a smarter hint.
     const { w, h } = this.level;
     let best = free[0];
-    let bestScore = -1;
+    let bestScore = -Infinity;
     for (const f of free) {
-      let score = 0;
+      // Spin cats make you wait, so a hint points at them only when nothing else is free.
+      let score = f.kind === 'spin' ? -100 : 0;
       for (const c of this.cats.values()) {
         if (c.id === f.id) continue;
-        let x = c.x + DX[c.dir], y = c.y + DY[c.dir];
+        const d = exitDir(c);
+        let x = c.x + DX[d], y = c.y + DY[d];
         while (x >= 0 && y >= 0 && x < w && y < h) {
           const o = [...this.cats.values()].find((k) => k.x === x && k.y === y);
           if (o) { if (o.id === f.id) score++; break; }
-          x += DX[c.dir]; y += DY[c.dir];
+          x += DX[d]; y += DY[d];
         }
       }
       if (score > bestScore) { bestScore = score; best = f; }

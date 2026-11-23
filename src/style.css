@@ -183,6 +183,19 @@ h1 {
   place-items: center;
 }
 .hint-icon svg { width: 22px; height: 22px; display: block; }
+.btn-wake {
+  flex-direction: row;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 12px;
+  font-size: 16px;
+  background: #b8a6ff;
+  color: var(--outline);
+}
+.bar { gap: 10px; }
+.intro-art { width: 120px; height: 120px; }
+.card-art { flex-wrap: wrap; }
+.card-art .stats { flex-basis: 100%; font-size: 16px; font-weight: 600; opacity: 0.8; margin-top: 10px; }
 
 .subhud { display: flex; justify-content: center; gap: 8px; min-height: 30px; margin-top: 6px; }
 .badge, .timer {
