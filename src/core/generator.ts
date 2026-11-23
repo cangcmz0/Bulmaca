@@ -4,27 +4,87 @@ import { Cat, Dir, DX, DY, Level, idx } from './types';
 
 export const COAT_COUNT = 6;
 
+export type LevelKind = 'tutorial' | 'easy' | 'normal' | 'hard' | 'boss' | 'daily';
+
 interface Params {
   w: number;
   h: number;
   fill: number;
-  targetDepth: number;
   shaped: boolean;
+  /** Hill-climb mutations spent making the board deeper. 0 = leave the random board as is. */
+  harden: number;
+  kind: LevelKind;
+  /** Seconds per cat for timed levels, or 0 for no timer. */
+  secPerCat: number;
+  /**
+   * Target depth / cats. 0.2 means many cats can leave at any moment (easy to spot a move);
+   * 0.8 means nearly a single chain where only one or two cats are free at a time.
+   */
+  chain: number;
 }
 
+/** Largest board that still reads well on a phone held upright. */
+export const MAX_W = 9;
+export const MAX_H = 11;
+
+/**
+ * Each block of 10 levels follows a sawtooth: a breather, normal levels, two hard spikes and a
+ * boss at the end. Spikes are where players fail and reach for "continue" ads; the easy level
+ * right before the boss keeps them from quitting.
+ */
+const PATTERN: LevelKind[] = ['normal', 'normal', 'normal', 'hard', 'normal', 'normal', 'hard', 'normal', 'easy', 'boss'];
+
+export function kindFor(n: number): LevelKind {
+  if (n <= 2) return 'tutorial';
+  if (n < 10) return n === 7 ? 'hard' : 'normal';
+  return PATTERN[(n - 1) % 10];
+}
+
+/**
+ * Difficulty grows without an upper level limit. Board size grows logarithmically until it hits
+ * the phone-size cap, after that the hill climb gets more budget (deeper chains) and timed levels
+ * get tighter, so level 5000 is still harder than level 500.
+ */
 export function paramsFor(n: number): Params {
-  const boss = n >= 20 && n % 10 === 0;
-  let p: Params;
-  if (n <= 4) p = { w: 4, h: 4, fill: 0.55, targetDepth: 2, shaped: false };
-  else if (n <= 10) p = { w: 5, h: 5, fill: 0.65, targetDepth: 3, shaped: false };
-  else if (n <= 25) p = { w: 5, h: 6, fill: 0.75, targetDepth: 4, shaped: n % 3 === 0 };
-  else if (n <= 50) p = { w: 6, h: 7, fill: 0.82, targetDepth: 5, shaped: n % 3 !== 1 };
-  else if (n <= 100) p = { w: 7, h: 8, fill: 0.88, targetDepth: 6, shaped: n % 2 === 0 };
-  else p = { w: 8, h: 9, fill: 0.9, targetDepth: 7, shaped: n % 2 === 0 };
-  if (boss) {
-    p = { ...p, w: p.w + 1, h: p.h + 1, fill: Math.min(0.95, p.fill + 0.05), targetDepth: p.targetDepth + 2 };
+  const kind = kindFor(n);
+  const g = Math.log2(1 + n / 5); // 0 at the start, ~5 at level 155, ~10 at level 5000
+  let size = 4 + Math.floor(g);
+  let fill = Math.min(0.93, 0.55 + 0.075 * Math.log2(1 + n / 3));
+  let harden = n < 6 ? 0 : Math.min(2500, Math.round(12 * n));
+  let secPerCat = 0;
+  let chain = Math.min(0.66, 0.18 + 0.075 * Math.log2(1 + n / 5));
+
+  if (kind === 'easy') {
+    size -= 1;
+    fill -= 0.1;
+    harden = Math.round(harden * 0.2);
+    chain -= 0.1;
+  } else if (kind === 'hard') {
+    size += 1;
+    fill += 0.04;
+    harden = Math.round(harden * 2 + 200);
+    chain += 0.12;
+  } else if (kind === 'boss') {
+    size += 1;
+    fill += 0.06;
+    harden = Math.round(harden * 3 + 400);
+    chain += 0.2;
   }
-  return p;
+
+  // Timers start once players know the game; they tighten slowly forever, with a fair floor.
+  const tight = Math.max(1.7, 4.2 - 0.45 * Math.log2(1 + n / 30));
+  if ((kind === 'hard' || kind === 'boss') && n >= 25) secPerCat = kind === 'boss' ? tight * 1.15 : tight;
+  else if (kind === 'normal' && n >= 150) secPerCat = tight * 1.6;
+
+  const w = Math.max(4, Math.min(MAX_W, size));
+  const h = Math.max(4, Math.min(MAX_H, size + (n >= 20 ? 1 : 0) + (n >= 100 ? 1 : 0)));
+  return {
+    w, h,
+    fill: Math.min(0.95, Math.max(0.45, fill)),
+    shaped: n >= 12 && kind !== 'boss' && hashSeed(n, 7) % 3 !== 0,
+    harden, kind, secPerCat,
+    chain: Math.max(0.12, Math.min(0.85, chain)),
+  };
 }
 
 type ShapeFn = (x: number, y: number, w: number, h: number) => boolean;
@@ -126,7 +186,7 @@ function tutorial(n: number): Level | null {
       { id: 1, x: 1, y: 1, dir: 1, coat: 2 },
       { id: 2, x: 2, y: 1, dir: 1, coat: 4 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
   }
   if (n === 2) {
     const w = 3, h = 4;
@@ -137,9 +197,41 @@ function tutorial(n: number): Level | null {
       { id: 3, x: 2, y: 2, dir: 1, coat: 0 },
       { id: 4, x: 1, y: 3, dir: 3, coat: 2 },
     ];
-    return { number: n, w, h, mask: new Array(w * h).fill(true), cats };
+    return { number: n, w, h, mask: new Array(w * h).fill(true), cats, kind: 'tutorial', timeLimit: null };
   }
   return null;
+}
+
+function score(w: number, h: number, cats: Cat[], target: number): { sc: number; hit: boolean } {
+  const r = solve(w, h, cats);
+  if (!r.solvable) return { sc: -Infinity, hit: false };
+  // Hit the target depth first; among equals prefer fewer safe first moves.
+  const off = Math.abs(r.depth - target);
+  return { sc: -off * 10 + (r.blockedAtStart / Math.max(1, cats.length)) * 3, hit: off === 0 };
+}
+
+/**
+ * Hill climb: turn one cat to a new direction, keep the change if the board stays solvable and
+ * gets closer to the target depth. Turning cats inward builds "this one first, then that one"
+ * chains, so the climb can make a board as hard as we ask for.
+ */
+function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], budget: number, target: number): Cat[] {
+  if (budget <= 0 || cats.length < 3) return cats;
+  let cur = cats.map((c) => ({ ...c }));
+  let curScore = score(w, h, cur, target);
+  for (let i = 0; i < budget && !curScore.hit; i++) {
+    const k = rng.int(cur.length);
+    const c = cur[k];
+    const dir = ((c.dir + 1 + rng.int(3)) % 4) as Dir;
+    // Facing straight off the board makes a trivially free cat; mostly skip those.
+    const nx = c.x + DX[dir], ny = c.y + DY[dir];
+    if ((nx < 0 || ny < 0 || nx >= w || ny >= h || !mask[idx(w, nx, ny)]) && rng.next() < 0.8) continue;
+    const next = cur.slice();
+    next[k] = { ...c, dir };
+    const sc = score(w, h, next, target);
+    if (sc.sc >= curScore.sc) { cur = next; curScore = sc; }
+  }
+  return cur;
 }
 
 export function generateLevel(n: number, salt = 0): Level {
@@ -151,23 +243,21 @@ export function generateLevel(n: number, salt = 0): Level {
 
   let best: Cat[] = [];
   let bestScore = -Infinity;
-  for (let attempt = 0; attempt < 14; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     const rng = new Rng(hashSeed(n, attempt, salt, 0x63617473));
     const cats = placeCats(rng, p, mask);
-    const res = solve(p.w, p.h, cats);
-    if (!res.solvable) continue; // never expected, but stay safe
-    const score =
-      -Math.abs(res.depth - p.targetDepth) * 3 +
-      (res.blockedAtStart / Math.max(1, cats.length)) * 4 +
-      cats.length * 0.05;
-    if (score > bestScore) { bestScore = score; best = cats; }
+    const sc = score(p.w, p.h, cats, Math.round(cats.length * p.chain)).sc + cats.length * 0.5;
+    if (sc > bestScore) { bestScore = sc; best = cats; }
   }
-  return { number: n, w: p.w, h: p.h, mask, cats: best };
+  const target = Math.max(2, Math.round(best.length * p.chain));
+  best = harden(new Rng(hashSeed(n, salt, 0x68617264)), p.w, p.h, mask, best, p.harden, target);
+  const timeLimit = p.secPerCat > 0 ? Math.max(15, Math.round((best.length * p.secPerCat) / 5) * 5) : null;
+  return { number: n, w: p.w, h: p.h, mask, cats: best, kind: p.kind, timeLimit };
 }
 
 /** Daily puzzle: same board for everyone on a given UTC day. */
 export function dailyLevel(date: Date): Level {
   const key = date.getUTCFullYear() * 10000 + (date.getUTCMonth() + 1) * 100 + date.getUTCDate();
-  const lvl = generateLevel(60, key);
-  return { ...lvl, number: -1 };
+  const lvl = generateLevel(80, key);
+  return { ...lvl, number: -1, kind: 'daily', timeLimit: null };
 }

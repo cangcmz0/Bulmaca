@@ -27,13 +27,40 @@ describe('generateLevel', () => {
     expect(generateLevel(42)).toEqual(generateLevel(42));
   });
 
-  it('gets deeper as levels progress', () => {
+  it('gets harder as levels progress, with no upper limit', () => {
     const avg = (from: number, to: number) => {
       let s = 0;
       for (let n = from; n <= to; n++) { const l = generateLevel(n); s += solve(l.w, l.h, l.cats).depth; }
       return s / (to - from + 1);
     };
-    expect(avg(101, 130)).toBeGreaterThan(avg(5, 10));
+    const early = avg(5, 14), mid = avg(51, 60), late = avg(301, 310);
+    expect(mid).toBeGreaterThan(early);
+    expect(late).toBeGreaterThan(mid);
+  });
+
+  it('generates very high levels quickly and solvably', () => {
+    for (const n of [1000, 9999, 123456, 1000000]) {
+      const t0 = performance.now();
+      const l = generateLevel(n);
+      expect(performance.now() - t0).toBeLessThan(1500);
+      expect(solve(l.w, l.h, l.cats).solvable).toBe(true);
+    }
+  });
+
+  it('follows the sawtooth: bosses are harder than the easy level before them', () => {
+    for (const block of [3, 8, 20]) {
+      const easy = generateLevel(block * 10 + 9), boss = generateLevel(block * 10 + 10);
+      expect(easy.kind).toBe('easy');
+      expect(boss.kind).toBe('boss');
+      expect(solve(boss.w, boss.h, boss.cats).depth).toBeGreaterThan(solve(easy.w, easy.h, easy.cats).depth);
+    }
+  });
+
+  it('timed levels get tighter over time but never unfair', () => {
+    const perCat = (n: number) => { const l = generateLevel(n); return l.timeLimit! / l.cats.length; };
+    expect(generateLevel(24).timeLimit).toBeNull(); // no timers before level 25
+    expect(perCat(1004)).toBeLessThan(perCat(34));
+    expect(perCat(1000004)).toBeGreaterThanOrEqual(1.5);
   });
 
   it('daily level is stable per day and solvable', () => {

@@ -20,6 +20,9 @@ export interface Level {
   /** Row-major; true where the board has a cushion tile. Cats only sit on active cells. */
   mask: boolean[];
   cats: Cat[];
+  kind: 'tutorial' | 'easy' | 'normal' | 'hard' | 'boss' | 'daily';
+  /** Seconds, or null for untimed levels. */
+  timeLimit: number | null;
 }
 
 export const idx = (w: number, x: number, y: number): number => y * w + x;

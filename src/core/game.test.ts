@@ -36,4 +36,17 @@ describe('GameState', () => {
     g.addLife();
     expect(g.lost).toBe(false);
   });
+
+  it('runs out of time on timed levels and can buy more', () => {
+    const lvl = generateLevel(34); // a hard level past 25 is timed
+    expect(lvl.kind).toBe('hard');
+    expect(lvl.timeLimit).toBeGreaterThan(0);
+    const g = new GameState(lvl);
+    expect(g.tick(lvl.timeLimit! - 1)).toBe(false);
+    expect(g.tick(5)).toBe(true);
+    expect(g.loseReason).toBe('time');
+    g.addTime(30);
+    expect(g.lost).toBe(false);
+    expect(g.timeLeft).toBe(30);
+  });
 });

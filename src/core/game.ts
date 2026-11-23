@@ -15,19 +15,40 @@ export class GameState {
   lives = START_LIVES;
   mistakes = 0;
   readonly total: number;
+  /** Seconds left on timed levels, null when untimed. */
+  timeLeft: number | null;
 
   constructor(level: Level) {
     this.level = level;
     this.cats = new Map(level.cats.map((c) => [c.id, { ...c }]));
     this.total = level.cats.length;
+    this.timeLeft = level.timeLimit;
   }
 
   get won(): boolean {
     return this.cats.size === 0;
   }
 
+  get loseReason(): 'lives' | 'time' | null {
+    if (this.won) return null;
+    if (this.lives <= 0) return 'lives';
+    if (this.timeLeft !== null && this.timeLeft <= 0) return 'time';
+    return null;
+  }
+
   get lost(): boolean {
-    return this.lives <= 0 && !this.won;
+    return this.loseReason !== null;
+  }
+
+  /** Advances the clock; returns true on the tick the time runs out. */
+  tick(dt: number): boolean {
+    if (this.timeLeft === null || this.lost || this.won) return false;
+    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    return this.timeLeft === 0;
+  }
+
+  addTime(seconds: number): void {
+    if (this.timeLeft !== null) this.timeLeft += seconds;
   }
 
   catAt(x: number, y: number): Cat | undefined {

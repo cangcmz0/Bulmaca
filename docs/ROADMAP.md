@@ -7,7 +7,18 @@
 - Test reklam akışı (ödüllü reklam ve geçiş reklamı)
 - Capacitor Android projesi (yalnızca dikey ekran)
 
-## ⏭ v0.2: Mağazaya hazırlık
+## ✅ v0.2: Sonsuz zorluk ve reklam anları
+- **Sonsuz seviye:** zorluk sınırsız artıyor. Tahta 9×11'e kadar büyüyor, sonra "zincir" derinliği ve süre baskısı artmaya devam ediyor. Seviye 1.000.000 de üretilebiliyor.
+- **Testere dişi zorluk:** her 10 seviye normal ×3, zor, normal ×2, zor, normal, kolay (nefes), boss şeklinde gidiyor.
+- **Süre:** 25. seviyeden itibaren zor ve boss seviyelerde, 150. seviyeden itibaren tüm seviyelerde. Zamanla sıkılaşıyor, kedi başına en az ~1.7 sn kalıyor.
+- **Ödüllü reklam anları:** +1 can, +30 sn, +2 ipucu, boss sonrası "3 katı ipucu", zor/boss seviyede 2 başarısızlıktan sonra "seviyeyi geç"
+- **Geçiş reklamı düzeni** (`src/platform/monetization.ts`):
+  - 10. seviyeden sonra başlıyor.
+  - 40. seviyeye kadar 3 seviyede bir, sonra 2 seviyede bir. Baştan başlamalar da sayılıyor.
+  - İki geçiş reklamı arasında en az 45 sn oluyor.
+  - Ödüllü reklam izleyene 60 sn boyunca geçiş reklamı gösterilmiyor.
+
+## ⏭ v0.3: Mağazaya hazırlık
 - [ ] **AdMob:** `@capacitor-community/admob` eklentisi. `src/platform/ads.ts` içinde aynı arayüzü kullanan bir `AdMobAds` sınıfı yazılacak. Önce test ID'leri, sonra gerçek ID'ler. GDPR onayı için UMP kullanılacak.
 - [ ] **"Reklamsız" satın alma:** Google Play Billing (`@capacitor-community/in-app-purchases` ya da RevenueCat)
 - [ ] Android geri tuşu (`@capacitor/app`), titreşim (`@capacitor/haptics`)

@@ -4,10 +4,11 @@ import '@fontsource/fredoka/latin-600.css';
 import '@fontsource/fredoka/latin-ext-600.css';
 import './style.css';
 import { GameState } from './core/game';
-import { dailyLevel, generateLevel } from './core/generator';
+import { dailyLevel, generateLevel, kindFor } from './core/generator';
 import { Key, LANG, t } from './i18n';
 import { ads } from './platform/ads';
 import { sfx, vibrate } from './platform/audio';
+import { MONET, pacing } from './platform/monetization';
 import { load, save, todayKey, yesterdayKey } from './platform/storage';
 import { COATS, drawCat } from './render/cat';
 import { BoardRenderer } from './render/renderer';
@@ -28,6 +29,10 @@ const renderer = new BoardRenderer($<HTMLCanvasElement>('board'));
 let state: GameState | null = null;
 let isDaily = false;
 let winPending = false;
+/** The level clock waits for the intro banner to finish. */
+let clockStartsAt = 0;
+/** Failed attempts per level this session, used to offer "skip level". */
+const fails = new Map<number, number>();
 
 // ---------------------------------------------------------------- screens
 
@@ -39,7 +44,9 @@ function showScreen(id: 'home' | 'game'): void {
 
 function refreshHome(): void {
   applyTheme(themeFor(data.level));
-  $('play-level').textContent = `${t('level')} ${data.level}`;
+  const k = kindFor(data.level);
+  const tag = k === 'hard' || k === 'boss' ? ` · ${t(k)}` : '';
+  $('play-level').textContent = `${t('level')} ${data.level}${tag}`;
   const doneToday = data.dailyDone === todayKey();
   $('daily-label').textContent = doneToday ? t('dailyDone') : t('daily');
   const streakAlive = data.dailyDone === todayKey() || data.dailyDone === yesterdayKey();
@@ -74,6 +81,60 @@ function startLevel(n: number): void {
   renderHearts();
   renderProgress();
   renderHints();
+  renderKind();
+  renderTimer();
+}
+
+function renderKind(): void {
+  if (!state) return;
+  const { kind, timeLimit } = state.level;
+  const badge = $('kind-badge');
+  const shown = kind === 'easy' || kind === 'hard' || kind === 'boss';
+  badge.className = `badge ${kind}${shown ? '' : ' hidden'}`;
+  if (shown) badge.textContent = t(kind);
+  const banner = $('banner');
+  clockStartsAt = performance.now();
+  if (kind === 'hard' || kind === 'boss') {
+    $('banner-title').textContent = t(kind === 'boss' ? 'bossBanner' : 'hardBanner');
+    $('banner-sub').textContent = kind === 'boss' ? t('bossSub') : timeLimit ? t('timedSub') : '';
+    banner.className = `banner ${kind}`;
+    // restart the CSS animation
+    void banner.offsetWidth;
+    clockStartsAt += 1600;
+    window.setTimeout(() => banner.classList.add('hidden'), 1600);
+  } else {
+    banner.className = 'banner hidden';
+  }
+}
+
+let lastTimerText = '';
+function renderTimer(): void {
+  const el = $('timer');
+  if (!state || state.timeLeft === null) {
+    el.classList.add('hidden');
+    lastTimerText = '';
+    return;
+  }
+  const s = Math.ceil(state.timeLeft);
+  const text = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  if (text === lastTimerText) return;
+  if (s <= 5 && s > 0 && lastTimerText) sfx.click();
+  lastTimerText = text;
+  el.textContent = text;
+  el.classList.remove('hidden');
+  el.classList.toggle('low', s <= 10);
+}
+
+function clockRunning(now: number): boolean {
+  return !!state && !winPending && now >= clockStartsAt &&
+    $('modal').classList.contains('hidden') && $('ad').classList.contains('hidden') &&
+    !$('game').classList.contains('hidden');
+}
+
+async function watchRewarded(): Promise<boolean> {
+  const ok = await ads.showRewarded();
+  if (ok) pacing.rewardedWatched();
+  return ok;
 }
 
 function setTip(key: Key | null): void {
@@ -123,7 +184,7 @@ $('board').addEventListener('pointerdown', (e) => {
     const delay = Math.max(60, (res.steps / 16) * 1000);
     window.setTimeout(() => { sfx.meow(); vibrate(60); renderHearts(state!.lives); }, delay);
     if (state.level.number === 1) setTip('tutorial2');
-    if (state.lost) window.setTimeout(showLose, 900);
+    if (state.lost) window.setTimeout(() => showLose(), 900);
   }
 });
 
@@ -131,6 +192,8 @@ function finishWin(): void {
   if (!state) return;
   winPending = false;
   const stars = state.stars();
+  const n = state.level.number;
+  const boss = state.level.kind === 'boss';
   renderer.celebrate();
   sfx.win();
   if (isDaily) {
@@ -140,52 +203,114 @@ function finishWin(): void {
       data.dailyDone = today;
     }
   } else {
-    const n = state.level.number;
     data.stars[n] = Math.max(data.stars[n] ?? 0, stars);
     data.level = Math.max(data.level, n + 1);
     data.levelsSinceAd++;
+    if (boss) data.hints += MONET.bossHintReward;
   }
+  fails.delete(n);
   save(data);
-  const n = state.level.number;
+  renderHints();
   window.setTimeout(() => {
     const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('');
-    openModal(art, isDaily ? t('winDaily') : t('winTitle'), isDaily && data.streak > 0 ? `🔥 ${data.streak} ${t('streak')}` : '', [
-      isDaily
-        ? { label: t('home'), primary: true, run: goHome }
-        : { label: t('next'), primary: true, run: () => void nextLevel(n + 1) },
-      ...(isDaily ? [] : [{ label: t('home'), run: goHome }]),
-    ]);
+    if (isDaily) {
+      openModal(art, t('winDaily'), data.streak > 0 ? `🔥 ${data.streak} ${t('streak')}` : '', [
+        { label: t('home'), primary: true, run: goHome },
+      ]);
+    } else if (boss) {
+      // Rewarded "multiply your prize" right after a win is the best-performing ad slot in puzzles.
+      openModal(art, t('bossWin'), t('bossReward'), [
+        {
+          label: t('tripleReward'), primary: true,
+          run: async () => {
+            closeModal();
+            if (await watchRewarded()) {
+              data.hints += MONET.bossHintReward * (MONET.bossRewardMultiplier - 1);
+              save(data);
+              renderHints();
+              sfx.hint();
+            }
+            startLevel(n + 1);
+          },
+        },
+        { label: t('next'), run: () => void nextLevel(n + 1) },
+      ]);
+    } else {
+      openModal(art, t('winTitle'), '', [
+        { label: t('next'), primary: true, run: () => void nextLevel(n + 1) },
+        { label: t('home'), run: goHome },
+      ]);
+    }
   }, 650);
 }
 
 async function nextLevel(n: number): Promise<void> {
   closeModal();
-  // Interstitials stay out of the first 10 levels and show at most every 3 levels.
-  if (!data.noAds && n > 10 && data.levelsSinceAd >= 3) {
+  if (pacing.shouldShowInterstitial(n, data.levelsSinceAd, data.noAds)) {
     data.levelsSinceAd = 0;
     save(data);
+    pacing.interstitialShown();
     await ads.showInterstitial();
   }
   startLevel(n);
 }
 
-function showLose(): void {
-  if (!state) return;
-  sfx.lose();
+function showLose(firstTime = true): void {
+  if (!state || !state.lost) return;
   const n = state.level.number;
-  openModal(icons.brokenHeart, t('loseTitle'), t('loseText'), [
-    {
+  const reason = state.loseReason;
+  if (firstTime) {
+    sfx.lose();
+    fails.set(n, (fails.get(n) ?? 0) + 1);
+  }
+  const actions: Action[] = [];
+  if (reason === 'time') {
+    actions.push({
+      label: t('watchTime'), primary: true,
+      run: async () => {
+        closeModal();
+        if (await watchRewarded()) state!.addTime(MONET.rewardedSeconds);
+        else showLose(false);
+      },
+    });
+  } else {
+    actions.push({
       label: t('watchLife'), primary: true,
       run: async () => {
         closeModal();
-        if (await ads.showRewarded()) {
-          state!.addLife(1);
+        if (await watchRewarded()) {
+          state!.addLife(MONET.rewardedLives);
           renderHearts(0);
-        } else showLose();
+        } else showLose(false);
       },
+    });
+  }
+  const tough = state.level.kind === 'hard' || state.level.kind === 'boss';
+  if (!isDaily && tough && (fails.get(n) ?? 0) >= MONET.skipAfterFails) {
+    actions.push({
+      label: t('skip'),
+      run: async () => {
+        closeModal();
+        if (await watchRewarded()) {
+          data.stars[n] = Math.max(data.stars[n] ?? 0, 1);
+          data.level = Math.max(data.level, n + 1);
+          fails.delete(n);
+          save(data);
+          startLevel(n + 1);
+        } else showLose(false);
+      },
+    });
+  }
+  actions.push({
+    label: t('retry'),
+    run: () => {
+      // Retries count towards interstitial pacing like a finished level.
+      if (!isDaily) data.levelsSinceAd++;
+      void nextLevel(n);
     },
-    { label: t('retry'), run: () => { closeModal(); startLevel(n); } },
-  ]);
+  });
+  const art = reason === 'time' ? `<span class="big-emoji">⏰</span>` : icons.brokenHeart;
+  openModal(art, t(reason === 'time' ? 'timeUpTitle' : 'loseTitle'), t(reason === 'time' ? 'timeUpText' : 'loseText'), actions);
 }
 
 $('hint-btn').addEventListener('click', () => {
@@ -206,8 +331,8 @@ $('hint-btn').addEventListener('click', () => {
       label: t('watchHint'), primary: true,
       run: async () => {
         closeModal();
-        if (await ads.showRewarded()) {
-          data.hints += 2;
+        if (await watchRewarded()) {
+          data.hints += MONET.rewardedHints;
           save(data);
           renderHints();
         }
@@ -264,15 +389,28 @@ function closeModal(): void {
 
 // ---------------------------------------------------------------- loop
 
+let lastFrame = performance.now();
 function loop(now: number): void {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  lastFrame = now;
   renderer.frame(now);
   if (winPending && renderer.catsVisible === 0) finishWin();
+  if (state && clockRunning(now)) {
+    if (state.tick(dt)) showLose();
+    renderTimer();
+  }
   requestAnimationFrame(loop);
 }
 
 refreshHome();
 requestAnimationFrame(loop);
 
-// Dev helper: ?level=N jumps straight into a level.
-const jump = Number(new URLSearchParams(location.search).get('level'));
-if (jump > 0) startLevel(jump);
+// Dev helpers: ?level=N jumps straight into a level, &time=S shortens its clock for testing.
+const params = new URLSearchParams(location.search);
+const jump = Number(params.get('level'));
+if (jump > 0) {
+  startLevel(jump);
+  const s = Number(params.get('time'));
+  const st = state as GameState | null; // assigned inside startLevel, TS can't see it
+  if (s > 0 && st && st.timeLeft !== null) st.timeLeft = s;
+}
