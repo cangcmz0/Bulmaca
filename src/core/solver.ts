@@ -125,10 +125,39 @@ export function findSolution(w: number, h: number, cats: readonly Cat[], exits0 
     if (++nodes > limit) { outOfBudget = true; return false; }
     const key = String.fromCharCode(...alive);
     if (failed.has(key)) return false;
-    // spin cats in their window first, then plain cats
+    // Cats lying anywhere on another cat's path (for spin cats: on any of their four rays).
+    const onPath = new Map<number, number>();
+    const walk = (x0: number, y0: number, d: Dir) => {
+      let x = x0 + DX[d], y = y0 + DY[d];
+      while (x >= 0 && y >= 0 && x < w && y < h) {
+        const o = grid[idx(w, x, y)];
+        if (o !== -1) onPath.set(o, (onPath.get(o) ?? 0) + 1);
+        x += DX[d]; y += DY[d];
+      }
+    };
+    for (let j = 0; j < n; j++) {
+      if (!alive[j]) continue;
+      const c = cats[j];
+      if (c.kind === 'spin') for (let d = 0 as Dir; d < 4; d = (d + 1) as Dir) walk(c.x, c.y, d);
+      else walk(c.x, c.y, dirAt(c, 0));
+    }
+    // Spin cats in their window first, then plain cats. A free plain cat that lies on nobody's
+    // path stays free and can never block anyone, so all such cats are interchangeable "wait"
+    // moves whose only effect is turning the spinners. Trying one of them is enough: the pruning
+    // is exact and keeps the search small.
     const cand: number[] = [];
     for (let i = 0; i < n; i++) if (alive[i] && cats[i].kind === 'spin' && freeAt(i, exits)) cand.push(i);
-    for (let i = 0; i < n; i++) if (alive[i] && cats[i].kind !== 'spin' && freeAt(i, exits)) cand.push(i);
+    let token = -1;
+    const plain: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (!alive[i] || cats[i].kind === 'spin' || !freeAt(i, exits)) continue;
+      if (onPath.has(i)) plain.push(i);
+      else if (token === -1) token = i;
+    }
+    // Clear the cats in the most paths first: that opens the board fastest.
+    plain.sort((a, b) => onPath.get(b)! - onPath.get(a)!);
+    cand.push(...plain);
+    if (token !== -1) cand.push(token);
     for (const i of cand) {
       const cell = idx(w, cats[i].x, cats[i].y);
       alive[i] = 0; grid[cell] = -1; order.push(i);
