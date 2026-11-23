@@ -12,6 +12,7 @@ import { sfx, vibrate } from './platform/audio';
 import { MONET, pacing } from './platform/monetization';
 import { load, save, todayKey, yesterdayKey } from './platform/storage';
 import { COATS, drawCat, drawSleepy } from './render/cat';
+import { HomeScene } from './render/home';
 import { BoardRenderer } from './render/renderer';
 import { applyTheme, themeFor } from './render/theme';
 import { icons } from './ui/icons';
@@ -27,6 +28,12 @@ $('back-btn').innerHTML = icons.back;
 document.querySelector('.hint-icon')!.innerHTML = icons.bulb;
 
 const renderer = new BoardRenderer($<HTMLCanvasElement>('board'));
+const scene = new HomeScene($<HTMLCanvasElement>('home-scene'), (kind) => {
+  sfx.unlock();
+  if (kind === 'meow') sfx.meow();
+  else sfx.hint();
+  vibrate(10);
+});
 let state: GameState | null = null;
 let isDaily = false;
 let winPending = false;
@@ -49,30 +56,32 @@ function showScreen(id: 'home' | 'game'): void {
   $('home').classList.toggle('hidden', id !== 'home');
   $('game').classList.toggle('hidden', id !== 'game');
   if (id === 'game') requestAnimationFrame(() => renderer.resize());
+  if (id === 'home') scene.start();
+  else scene.stop();
 }
 
 function refreshHome(): void {
   applyTheme(themeFor(data.level));
-  const k = kindFor(data.level);
+  const n = data.level;
+  const k = kindFor(n);
   const tag = k === 'hard' || k === 'boss' ? ` · ${t(k)}` : '';
-  const of = data.level <= TOTAL_LEVELS ? ` / ${TOTAL_LEVELS}` : '';
-  $('play-level').textContent = `${levelName(data.level)}${of}${tag}`;
+  $('play-level').textContent = `${levelName(n)}${tag}`;
+  const totalStars = Object.values(data.stars).reduce((a, b) => a + b, 0);
+  $('stars-chip').textContent = `⭐ ${totalStars}`;
+  // Progress card: the bar fills towards the next boss, a goal that is always close.
+  $('pc-level').textContent = n <= TOTAL_LEVELS ? `${levelName(n)} / ${TOTAL_LEVELS}` : levelName(n);
+  const toBoss = Math.ceil(n / 10) * 10 - n;
+  $('pc-next').textContent = toBoss === 0 ? t('bossNext') : t('bossIn').replace('{n}', String(toBoss));
+  $('pc-fill').style.width = `${(((n - 1) % 10) / 9) * 100}%`;
   const doneToday = data.dailyDone === todayKey();
   $('daily-label').textContent = doneToday ? t('dailyDone') : t('daily');
   const streakAlive = data.dailyDone === todayKey() || data.dailyDone === yesterdayKey();
   $('streak-label').textContent = streakAlive && data.streak > 0 ? `🔥 ${data.streak} ${t('streak')}` : '';
+  const giftReady = data.giftDay !== todayKey();
+  $('gift-label').textContent = `🎁 ${t('gift')}`;
+  $('gift-sub').textContent = giftReady ? t('giftReady') : t('giftTomorrow');
+  $('gift-btn').classList.toggle('ready', giftReady);
   $('sound-btn').innerHTML = data.sound ? icons.soundOn : icons.soundOff;
-  drawLogo();
-}
-
-function drawLogo(): void {
-  const c = $<HTMLCanvasElement>('logo-cat');
-  const ctx = c.getContext('2d')!;
-  ctx.clearRect(0, 0, c.width, c.height);
-  drawCat(ctx, COATS[0], {
-    x: 240, y: 264, s: 420, angle: 0, stretch: 1, scale: 1, blink: false,
-    dizzy: false, hurt: 0, tail: 0.25, running: 0,
-  });
 }
 
 // ---------------------------------------------------------------- game flow
@@ -275,6 +284,7 @@ function finishWin(): void {
     data.stars[n] = Math.max(data.stars[n] ?? 0, stars);
     data.level = Math.max(data.level, n + 1);
     data.levelsSinceAd++;
+    data.wins++;
     if (boss) data.hints += MONET.bossHintReward;
   }
   fails.delete(n);
@@ -311,10 +321,25 @@ function finishWin(): void {
         { label: t('next'), run: () => void nextLevel(n + 1) },
       ]);
     } else {
-      openModal(art, perfect ? t('perfect') : t('winTitle'), '', [
-        { label: t('next'), primary: true, run: () => void nextLevel(n + 1) },
-        { label: t('home'), run: goHome },
-      ]);
+      const actions: Action[] = [{ label: t('next'), primary: true, run: () => void nextLevel(n + 1) }];
+      // An optional bonus every few wins: revenue the player chooses, never forced.
+      if (data.wins % MONET.bonusOfferEvery === 0) {
+        actions.push({
+          label: t('bonusHint'),
+          run: async () => {
+            closeModal();
+            if (await watchRewarded()) {
+              data.hints += 1;
+              save(data);
+              renderHints();
+              sfx.hint();
+            }
+            startLevel(n + 1);
+          },
+        });
+      }
+      actions.push({ label: t('home'), run: goHome });
+      openModal(art, perfect ? t('perfect') : t('winTitle'), '', actions);
     }
   }, 650);
 }
@@ -379,9 +404,9 @@ function showLose(firstTime = true): void {
   actions.push({
     label: t('retry'),
     run: () => {
-      // Retries count towards interstitial pacing like a finished level.
-      if (!isDaily) data.levelsSinceAd++;
-      void nextLevel(n);
+      // Never show a forced ad right after a loss: that is when players quit.
+      closeModal();
+      startLevel(n);
     },
   });
   const art = reason === 'time' ? `<span class="big-emoji">⏰</span>` : icons.brokenHeart;
@@ -433,6 +458,30 @@ $('wake-btn').addEventListener('click', () => {
       },
     },
     { label: t('cancel'), run: closeModal },
+  ]);
+});
+
+$('gift-btn').addEventListener('click', () => {
+  sfx.unlock();
+  sfx.click();
+  if (data.giftDay === todayKey()) return;
+  const claim = (hints: number) => {
+    data.giftDay = todayKey();
+    data.hints += hints;
+    save(data);
+    renderHints();
+    sfx.win();
+    refreshHome();
+  };
+  openModal('<span class="big-emoji">🎁</span>', t('giftTitle'), t('giftText'), [
+    {
+      label: t('giftTriple'), primary: true,
+      run: async () => {
+        closeModal();
+        claim(MONET.dailyGiftHints * ((await watchRewarded()) ? MONET.dailyGiftMultiplier : 1));
+      },
+    },
+    { label: t('giftTake'), run: () => { closeModal(); claim(MONET.dailyGiftHints); } },
   ]);
 });
 
@@ -498,6 +547,7 @@ function loop(now: number): void {
 }
 
 refreshHome();
+showScreen('home');
 requestAnimationFrame(loop);
 
 // Dev helpers: ?level=N jumps straight into a level, &time=S shortens its clock for testing.

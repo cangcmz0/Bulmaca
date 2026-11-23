@@ -10,6 +10,10 @@ export interface SaveData {
   levelsSinceAd: number;
   /** Special cat kinds whose intro card has been shown. */
   seenKinds: string[];
+  /** YYYY-MM-DD the daily gift was last claimed. */
+  giftDay: string | null;
+  /** Levels won in total, drives the bonus offer cadence. */
+  wins: number;
 }
 
 const KEY = 'kedi-kacisi-save-v1';
@@ -24,6 +28,8 @@ const DEFAULTS: SaveData = {
   streak: 0,
   levelsSinceAd: 0,
   seenKinds: [],
+  giftDay: null,
+  wins: 0,
 };
 
 export function load(): SaveData {

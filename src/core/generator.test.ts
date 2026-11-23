@@ -23,6 +23,16 @@ describe('generateLevel', () => {
     }
   });
 
+  it('never hands out trivial boards after the tutorial', () => {
+    for (let n = 3; n <= 60; n++) {
+      const l = generateLevel(n);
+      const r = solve(l.w, l.h, l.cats);
+      const free0 = l.cats.length - r.blockedAtStart;
+      expect(free0 / l.cats.length, `level ${n} free at start`).toBeLessThanOrEqual(0.35);
+      expect(r.depth, `level ${n} depth`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
   it('is deterministic', () => {
     expect(generateLevel(42)).toEqual(generateLevel(42));
   });
@@ -71,7 +81,8 @@ describe('generateLevel', () => {
 
   it('timed levels get tighter over time but never unfair', () => {
     const perCat = (n: number) => { const l = generateLevel(n); return l.timeLimit! / l.cats.length; };
-    expect(generateLevel(24).timeLimit).toBeNull(); // no timers before level 25
+    expect(generateLevel(17).timeLimit).toBeNull(); // no timers before level 20
+    expect(generateLevel(10).timeLimit).toBeNull();
     expect(perCat(1004)).toBeLessThan(perCat(34));
     expect(perCat(1000004)).toBeGreaterThanOrEqual(1.5);
   });

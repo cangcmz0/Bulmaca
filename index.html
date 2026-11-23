@@ -11,22 +11,36 @@
     <div id="app">
       <section id="home" class="screen">
         <div class="home-top">
+          <div class="chip" id="stars-chip"></div>
           <button class="icon-btn" id="sound-btn" aria-label="Ses"></button>
         </div>
         <div class="logo">
-          <canvas id="logo-cat" width="480" height="480"></canvas>
+          <canvas id="home-scene"></canvas>
           <h1 data-t="title"></h1>
-          <p class="subtitle" data-t="subtitle"></p>
+          <p class="subtitle" data-t="tapCat"></p>
+        </div>
+        <div class="progress-card">
+          <div class="pc-row">
+            <span class="pc-level" id="pc-level"></span>
+            <span class="pc-next" id="pc-next"></span>
+          </div>
+          <div class="pc-track"><div class="pc-fill" id="pc-fill"></div><div class="pc-boss">👑</div></div>
         </div>
         <div class="home-actions">
-          <button class="btn btn-primary" id="play-btn">
+          <button class="btn btn-primary btn-play" id="play-btn">
             <span data-t="play"></span>
             <small id="play-level"></small>
           </button>
-          <button class="btn btn-secondary" id="daily-btn">
-            <span id="daily-label"></span>
-            <small id="streak-label"></small>
-          </button>
+          <div class="home-row">
+            <button class="btn btn-secondary" id="daily-btn">
+              <span id="daily-label"></span>
+              <small id="streak-label"></small>
+            </button>
+            <button class="btn btn-secondary btn-gift" id="gift-btn">
+              <span id="gift-label"></span>
+              <small id="gift-sub"></small>
+            </button>
+          </div>
         </div>
       </section>
 

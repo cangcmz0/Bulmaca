@@ -28,7 +28,18 @@
 - Yeni ödüllü reklam anı: "Hepsini uyandır"
 - **Bitirme hissi:** "Süper/Muhteşem/Efsane xN" kombo yazıları, "Kusursuz!" ekranı (çift melodi, ekran parlaması, büyük konfeti), süre ve hata istatistiği
 
-## ⏭ v0.4: Mağazaya hazırlık
+## ✅ v0.4: Daha iyi bulmacalar, nazik reklamlar, canlı giriş ekranı
+- **Bulmaca kalitesi puanı:** başta çıkabilen kedi az, uzaktan gelen engeller çok. 3. seviyeden itibaren her tahta sertleştiriliyor. Test, 3-60 arasında hiçbir tahtanın kedilerinin %35'inden fazlasının başta çıkabilir olmadığını kontrol ediyor.
+- Özel kediler daha erken geliyor: uykucu 12, korkak 22, fırıldak 35. Sertleştirmeden önce ekleniyorlar, böylece zinciri kısaltmıyorlar.
+- Süre 20. seviyeden itibaren zor ve boss seviyelerde.
+- **Reklamlar:**
+  - Geçiş reklamı sadece kazandıktan sonra çıkıyor (kaybettikten sonra asla), 15. seviyeden itibaren.
+  - 60. seviyeye kadar 4 kazanmada bir, sonra 3'te bir. İki geçiş reklamı arasında en az 2 dk oluyor.
+  - Ödüllü reklam izleyen 3 dk boyunca geçiş reklamı görmüyor.
+- Yeni isteğe bağlı reklam anları: günlük hediye (1 ipucu, reklamla 3), her 3 kazanmada bir "+1 ipucu"
+- **Giriş ekranı:** dokunulabilir canlı kedi sahnesi (zıplama, kalpler, uyanan uykucu), boss'a kalan seviye çubuğu, yıldız sayacı, günlük hediye
+
+## ⏭ v0.5: Mağazaya hazırlık
 - [ ] **AdMob:** `@capacitor-community/admob` eklentisi. `src/platform/ads.ts` içinde aynı arayüzü kullanan bir `AdMobAds` sınıfı yazılacak. Önce test ID'leri, sonra gerçek ID'ler. GDPR onayı için UMP kullanılacak.
 - [ ] **"Reklamsız" satın alma:** Google Play Billing (`@capacitor-community/in-app-purchases` ya da RevenueCat)
 - [ ] Android geri tuşu (`@capacitor/app`), titreşim (`@capacitor/haptics`)

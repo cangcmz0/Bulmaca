@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameState, START_LIVES } from './game';
-import { generateLevel } from './generator';
+import { INTRO, generateLevel } from './generator';
 
 describe('GameState', () => {
   it('bumps then exits in the tutorial row', () => {
@@ -30,7 +30,7 @@ describe('GameState', () => {
             ((d === 0 && o.x === c.x && o.y < c.y) || (d === 2 && o.x === c.x && o.y > c.y) ||
              (d === 1 && o.y === c.y && o.x > c.x) || (d === 3 && o.y === c.y && o.x < c.x)));
           if (!blocked) break;
-          g.advance(g.level.spinPeriod);
+          g.advance(g.level.spinPeriod * 1.001); // a hair over one turn, avoids float rounding
         }
         expect(g.tap(c.x, c.y).kind, `level ${g.level.number}`).toBe('exit');
       }
@@ -49,7 +49,7 @@ describe('GameState', () => {
   });
 
   it('runs out of time on timed levels and can buy more', () => {
-    const lvl = generateLevel(34); // a hard level past 25 is timed
+    const lvl = generateLevel(34); // a hard level past 20 is timed
     expect(lvl.kind).toBe('hard');
     expect(lvl.timeLimit).toBeGreaterThan(0);
     const g = new GameState(lvl);
@@ -62,20 +62,20 @@ describe('GameState', () => {
   });
 
   it('sleepy cats wake for free, scared cats run backwards', () => {
-    const lvl = generateLevel(31);
+    const lvl = generateLevel(INTRO.sleepy);
     const sleepy = lvl.cats.filter((c) => c.kind === 'sleepy');
     expect(sleepy.length).toBe(3);
     const g = new GameState(lvl);
     const r = g.tap(sleepy[0].x, sleepy[0].y);
     expect(r.kind).toBe('wake');
     expect(g.lives).toBe(START_LIVES);
-    const scared = generateLevel(51).cats.find((c) => c.kind === 'scared')!;
-    const g2 = new GameState(generateLevel(51));
+    const scared = generateLevel(INTRO.scared).cats.find((c) => c.kind === 'scared')!;
+    const g2 = new GameState(generateLevel(INTRO.scared));
     expect(g2.runDir(scared)).toBe((scared.dir + 2) % 4);
   });
 
   it('spin cats turn a quarter every period', () => {
-    const lvl = generateLevel(81);
+    const lvl = generateLevel(INTRO.spin);
     const spin = lvl.cats.find((c) => c.kind === 'spin')!;
     const g = new GameState(lvl);
     expect(g.runDir(spin)).toBe(spin.dir);

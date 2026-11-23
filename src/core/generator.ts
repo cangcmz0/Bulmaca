@@ -1,5 +1,5 @@
 import { Rng, hashSeed } from './rng';
-import { solve } from './solver';
+import { firstBlocker, occupancy, solve } from './solver';
 import { Cat, CatKind, Dir, DX, DY, Level, idx } from './types';
 
 export const COAT_COUNT = 6;
@@ -21,6 +21,8 @@ interface Params {
    * 0.8 means nearly a single chain where only one or two cats are free at a time.
    */
   chain: number;
+  /** Added to the base number of cats allowed to be free at the start. */
+  free: number;
 }
 
 /** The game's official level count. Difficulty is tuned to keep rising all the way to here. */
@@ -52,43 +54,48 @@ export function paramsFor(n: number): Params {
   const kind = kindFor(n);
   const g = Math.log2(1 + n / 5); // 0 at the start, ~5 at level 155, ~10 at level 5000
   let size = 4 + Math.floor(g);
-  let fill = Math.min(0.93, 0.55 + 0.075 * Math.log2(1 + n / 3));
+  let fill = Math.min(0.93, 0.62 + 0.06 * Math.log2(1 + n / 3));
   const m = Math.min(n, TOTAL_LEVELS);
-  let harden = n < 6 ? 0 : Math.min(4000, Math.round(12 * n));
+  // Every level after the two tutorials gets hardened: no more "tap anything and win" boards.
+  let harden = n < 3 ? 0 : Math.min(4000, Math.round(60 + 12 * n));
   let secPerCat = 0;
-  // 0.30 at level 20, 0.40 at 100, 0.55 at 1000, 0.72 at 8000
-  let chain = 0.18 + 0.0507 * Math.log2(1 + m / 5);
+  // 0.39 at level 3, 0.45 at 20, 0.53 at 100, 0.65 at 1000, 0.74 at 8000
+  let chain = 0.36 + 0.036 * Math.log2(1 + m / 5);
+  let free = 0; // extra allowance of cats that can leave at the very start
 
   if (kind === 'easy') {
     size -= 1;
     fill -= 0.1;
-    harden = Math.round(harden * 0.2);
+    harden = Math.round(harden * 0.3);
     chain -= 0.1;
+    free = 2;
   } else if (kind === 'hard') {
     size += 1;
     fill += 0.04;
     harden = Math.round(harden * 2 + 200);
     chain += 0.12;
+    free = -1;
   } else if (kind === 'boss') {
     size += 1;
     fill += 0.06;
     harden = Math.round(harden * 3 + 400);
-    chain += 0.2;
+    chain += 0.18;
+    free = -1;
   }
 
   // Timers start once players know the game and tighten until level 8000: 4.2 s per cat at the
   // start, ~2.6 s at level 1000, 1.6 s at the end.
   const tight = 4.2 - 0.322 * Math.log2(1 + m / 30);
-  if ((kind === 'hard' || kind === 'boss') && n >= 25) secPerCat = kind === 'boss' ? tight * 1.15 : tight;
+  if ((kind === 'hard' || kind === 'boss') && n >= 20) secPerCat = kind === 'boss' ? tight * 1.15 : tight;
   else if (kind === 'normal' && n >= 150) secPerCat = tight * 1.6;
 
   const w = Math.max(4, Math.min(MAX_W, size));
-  const h = Math.max(4, Math.min(MAX_H, size + (n >= 20 ? 1 : 0) + (n >= 100 ? 1 : 0)));
+  const h = Math.max(5, Math.min(MAX_H, size + 1 + (n >= 100 ? 1 : 0)));
   return {
     w, h,
     fill: Math.min(0.95, Math.max(0.45, fill)),
-    shaped: n >= 12 && kind !== 'boss' && hashSeed(n, 7) % 3 !== 0,
-    harden, kind, secPerCat,
+    shaped: n >= 15 && kind !== 'boss' && hashSeed(n, 7) % 3 !== 0,
+    harden, kind, secPerCat, free,
     chain: Math.max(0.12, Math.min(0.9, chain)),
   };
 }
@@ -208,24 +215,50 @@ function tutorial(n: number): Level | null {
   return null;
 }
 
-function score(w: number, h: number, cats: Cat[], target: number): { sc: number; hit: boolean } {
+interface Goal {
+  /** Target number of waves. */
+  depth: number;
+  /** Most cats that may be free at the start. */
+  free: number;
+}
+
+/**
+ * Puzzle quality. In order of weight:
+ *  1. hit the target depth (how long the "this one first" chains are),
+ *  2. few cats free at the start, so the first move already needs looking,
+ *  3. blockers far away, since a cat blocked from across the board is easy to miss.
+ */
+function score(w: number, h: number, cats: Cat[], goal: Goal): { sc: number; hit: boolean } {
   const r = solve(w, h, cats);
   if (!r.solvable) return { sc: -Infinity, hit: false };
-  // Hit the target depth first; among equals prefer fewer safe first moves.
-  const off = Math.abs(r.depth - target);
-  return { sc: -off * 10 + (r.blockedAtStart / Math.max(1, cats.length)) * 3, hit: off === 0 };
+  const free0 = cats.length - r.blockedAtStart;
+  const off = Math.abs(r.depth - goal.depth);
+  const overFree = Math.max(0, free0 - goal.free);
+  const grid = occupancy(w, h, cats);
+  let dist = 0, blocked = 0;
+  for (const c of cats) {
+    const b = firstBlocker(w, h, grid, c);
+    if (b === -1) continue;
+    const o = cats[b] && cats[b].id === b ? cats[b] : cats.find((k) => k.id === b)!;
+    dist += Math.abs(o.x - c.x) + Math.abs(o.y - c.y);
+    blocked++;
+  }
+  const avgDist = blocked ? dist / blocked : 0;
+  return { sc: -off * 10 - overFree * 4 + Math.min(avgDist, 5) * 0.6, hit: off === 0 && overFree === 0 };
 }
 
 /**
  * Hill climb: turn one cat to a new direction, keep the change if the board stays solvable and
- * gets closer to the target depth. Turning cats inward builds "this one first, then that one"
- * chains, so the climb can make a board as hard as we ask for.
+ * scores at least as well. Once the goal is met, a short polish phase keeps improving the
+ * long-range blocks without leaving the goal.
  */
-function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], budget: number, target: number): Cat[] {
+function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], budget: number, goal: Goal): Cat[] {
   if (budget <= 0 || cats.length < 3) return cats;
   let cur = cats.map((c) => ({ ...c }));
-  let curScore = score(w, h, cur, target);
-  for (let i = 0; i < budget && !curScore.hit; i++) {
+  let curScore = score(w, h, cur, goal);
+  let polish = Math.min(200, Math.round(budget * 0.25));
+  for (let i = 0; i < budget; i++) {
+    if (curScore.hit && polish-- <= 0) break;
     const k = rng.int(cur.length);
     const c = cur[k];
     const dir = ((c.dir + 1 + rng.int(3)) % 4) as Dir;
@@ -234,14 +267,14 @@ function harden(rng: Rng, w: number, h: number, mask: boolean[], cats: Cat[], bu
     if ((nx < 0 || ny < 0 || nx >= w || ny >= h || !mask[idx(w, nx, ny)]) && rng.next() < 0.8) continue;
     const next = cur.slice();
     next[k] = { ...c, dir };
-    const sc = score(w, h, next, target);
-    if (sc.sc >= curScore.sc) { cur = next; curScore = sc; }
+    const sc = score(w, h, next, goal);
+    if (sc.sc >= curScore.sc && (sc.hit || !curScore.hit)) { cur = next; curScore = sc; }
   }
   return cur;
 }
 
 /** Level where each special cat first appears (a normal level, never a boss). */
-export const INTRO: Record<Exclude<CatKind, 'normal'>, number> = { sleepy: 31, scared: 51, spin: 81 };
+export const INTRO: Record<Exclude<CatKind, 'normal'>, number> = { sleepy: 12, scared: 22, spin: 35 };
 
 export function spinPeriodFor(n: number): number {
   const m = Math.min(n, TOTAL_LEVELS);
@@ -286,6 +319,13 @@ function assignSpecials(rng: Rng, cats: Cat[], counts: Record<Exclude<CatKind, '
   return out;
 }
 
+function goalFor(p: Params, cats: number): Goal {
+  return {
+    depth: Math.max(2, Math.round(cats * p.chain)),
+    free: Math.max(1, Math.min(5, 1 + Math.round(cats / 14) + p.free)),
+  };
+}
+
 export function generateLevel(n: number, salt = 0): Level {
   const t = salt === 0 ? tutorial(n) : null;
   if (t) return t;
@@ -298,13 +338,14 @@ export function generateLevel(n: number, salt = 0): Level {
   for (let attempt = 0; attempt < 6; attempt++) {
     const rng = new Rng(hashSeed(n, attempt, salt, 0x63617473));
     const cats = placeCats(rng, p, mask);
-    const sc = score(p.w, p.h, cats, Math.round(cats.length * p.chain)).sc + cats.length * 0.5;
+    const sc = score(p.w, p.h, cats, goalFor(p, cats.length)).sc + cats.length * 0.5;
     if (sc > bestScore) { bestScore = sc; best = cats; }
   }
-  const target = Math.max(2, Math.round(best.length * p.chain));
-  best = harden(new Rng(hashSeed(n, salt, 0x68617264)), p.w, p.h, mask, best, p.harden, target);
+  // Special cats go in before hardening so the climb builds chains around them (a spin cat
+  // can leave whichever way is open, which would otherwise shortcut the chains).
   const counts = specialsFor(n, p.kind, best.length);
   best = assignSpecials(new Rng(hashSeed(n, salt, 0x73706563)), best, counts);
+  best = harden(new Rng(hashSeed(n, salt, 0x68617264)), p.w, p.h, mask, best, p.harden, goalFor(p, best.length));
   // Spin cats make you wait for the right moment, so they buy a little extra clock.
   const extra = counts.spin * spinPeriodFor(n) * 1.5;
   const timeLimit = p.secPerCat > 0 ? Math.max(15, Math.round((best.length * p.secPerCat + extra) / 5) * 5) : null;

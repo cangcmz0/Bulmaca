@@ -3,14 +3,18 @@
  * tested without touching game code.
  */
 export const MONET = {
-  /** No interstitials before this level: new players must get hooked first. */
-  interstitialFromLevel: 10,
-  /** Levels (including retries) between interstitials. */
-  interstitialEvery: (level: number): number => (level < 40 ? 3 : 2),
+  /**
+   * Forced ads are kept rare: they only follow a win (never a loss, never mid-level), start once
+   * players are hooked, and back off for anyone who chose to watch a rewarded ad. Most revenue is
+   * meant to come from opt-in rewarded ads, which players don't resent.
+   */
+  interstitialFromLevel: 15,
+  /** Won levels between interstitials. */
+  interstitialEvery: (level: number): number => (level < 60 ? 4 : 3),
   /** Never two interstitials closer than this. */
-  interstitialMinGapMs: 45_000,
-  /** Someone who just watched a rewarded ad gets a break from interstitials. */
-  quietAfterRewardedMs: 60_000,
+  interstitialMinGapMs: 120_000,
+  /** Someone who just watched a rewarded ad gets a long break from interstitials. */
+  quietAfterRewardedMs: 180_000,
 
   rewardedLives: 1,
   rewardedSeconds: 30,
@@ -22,6 +26,13 @@ export const MONET = {
 
   /** Offer "skip level for an ad" on hard/boss levels after this many failed attempts. */
   skipAfterFails: 2,
+
+  /** Daily gift on the home screen: free hints once a day, a rewarded ad multiplies it. */
+  dailyGiftHints: 1,
+  dailyGiftMultiplier: 3,
+
+  /** Every Nth won level the win card offers a bonus hint for an optional ad. */
+  bonusOfferEvery: 3,
 };
 
 class AdPacing {
