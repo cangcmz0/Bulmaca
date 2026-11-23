@@ -23,6 +23,9 @@ interface Params {
   chain: number;
 }
 
+/** The game's official level count. Difficulty is tuned to keep rising all the way to here. */
+export const TOTAL_LEVELS = 8000;
+
 /** Largest board that still reads well on a phone held upright. */
 export const MAX_W = 9;
 export const MAX_H = 11;
@@ -41,18 +44,20 @@ export function kindFor(n: number): LevelKind {
 }
 
 /**
- * Difficulty grows without an upper level limit. Board size grows logarithmically until it hits
- * the phone-size cap, after that the hill climb gets more budget (deeper chains) and timed levels
- * get tighter, so level 5000 is still harder than level 500.
+ * Difficulty rises on a log scale across all 8000 levels: quick growth early (board size hits the
+ * phone cap around level 150), then a slow, steady squeeze, with deeper chains and tighter clocks,
+ * that only peaks at the final level. Levels past 8000 keep generating at peak difficulty.
  */
 export function paramsFor(n: number): Params {
   const kind = kindFor(n);
   const g = Math.log2(1 + n / 5); // 0 at the start, ~5 at level 155, ~10 at level 5000
   let size = 4 + Math.floor(g);
   let fill = Math.min(0.93, 0.55 + 0.075 * Math.log2(1 + n / 3));
-  let harden = n < 6 ? 0 : Math.min(2500, Math.round(12 * n));
+  const m = Math.min(n, TOTAL_LEVELS);
+  let harden = n < 6 ? 0 : Math.min(4000, Math.round(12 * n));
   let secPerCat = 0;
-  let chain = Math.min(0.66, 0.18 + 0.075 * Math.log2(1 + n / 5));
+  // 0.30 at level 20, 0.40 at 100, 0.55 at 1000, 0.72 at 8000
+  let chain = 0.18 + 0.0507 * Math.log2(1 + m / 5);
 
   if (kind === 'easy') {
     size -= 1;
@@ -71,8 +76,9 @@ export function paramsFor(n: number): Params {
     chain += 0.2;
   }
 
-  // Timers start once players know the game; they tighten slowly forever, with a fair floor.
-  const tight = Math.max(1.7, 4.2 - 0.45 * Math.log2(1 + n / 30));
+  // Timers start once players know the game and tighten until level 8000: 4.2 s per cat at the
+  // start, ~2.6 s at level 1000, 1.6 s at the end.
+  const tight = 4.2 - 0.322 * Math.log2(1 + m / 30);
   if ((kind === 'hard' || kind === 'boss') && n >= 25) secPerCat = kind === 'boss' ? tight * 1.15 : tight;
   else if (kind === 'normal' && n >= 150) secPerCat = tight * 1.6;
 
@@ -83,7 +89,7 @@ export function paramsFor(n: number): Params {
     fill: Math.min(0.95, Math.max(0.45, fill)),
     shaped: n >= 12 && kind !== 'boss' && hashSeed(n, 7) % 3 !== 0,
     harden, kind, secPerCat,
-    chain: Math.max(0.12, Math.min(0.85, chain)),
+    chain: Math.max(0.12, Math.min(0.9, chain)),
   };
 }
 

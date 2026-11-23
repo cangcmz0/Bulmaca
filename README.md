@@ -2,7 +2,7 @@
 
 A cute puzzle game for Android and the web. Each cat faces one direction. Tap a cat and it runs that way. If another cat is in the way it bumps and you lose a life, so you have to free the cats in the right order.
 
-- **Levels never run out:** a generator makes them and a solver checks every board is solvable. The same level number always gives the same board.
+- **8000 levels, harder all the way:** a generator makes them and a solver checks every board is solvable. The same level number always gives the same board. Past 8000, Master Mode keeps generating at peak difficulty.
 - **No art or audio files:** the cats are drawn in code and the sounds are synthesised with WebAudio.
 - **Monetisation is already in the game flow:** a rewarded ad gives a life or hints, and interstitials appear after level 10, at most every 3 levels. In the web build, ads are a test overlay.
 - **Daily puzzle with streaks.** UI in Turkish and English, picked automatically.

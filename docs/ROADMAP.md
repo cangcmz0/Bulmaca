@@ -8,7 +8,8 @@
 - Capacitor Android projesi (yalnızca dikey ekran)
 
 ## ✅ v0.2: Sonsuz zorluk ve reklam anları
-- **Sonsuz seviye:** zorluk sınırsız artıyor. Tahta 9×11'e kadar büyüyor, sonra "zincir" derinliği ve süre baskısı artmaya devam ediyor. Seviye 1.000.000 de üretilebiliyor.
+- **8000 seviye:** zorluk 8000. seviyeye kadar kesintisiz artıyor. Tahta ~150. seviyede 9×11'e ulaşıyor, sonra "zincir" derinliği (0.40 → 0.72) ve süre baskısı (kedi başına 4.2 sn → 1.6 sn) 8000'e kadar artıyor. 8000. seviye son boss.
+- **Usta Modu:** 8000'i bitirene final ekranı çıkıyor, sonrasında seviyeler en yüksek zorlukta sonsuza dek devam ediyor.
 - **Testere dişi zorluk:** her 10 seviye normal ×3, zor, normal ×2, zor, normal, kolay (nefes), boss şeklinde gidiyor.
 - **Süre:** 25. seviyeden itibaren zor ve boss seviyelerde, 150. seviyeden itibaren tüm seviyelerde. Zamanla sıkılaşıyor, kedi başına en az ~1.7 sn kalıyor.
 - **Ödüllü reklam anları:** +1 can, +30 sn, +2 ipucu, boss sonrası "3 katı ipucu", zor/boss seviyede 2 başarısızlıktan sonra "seviyeyi geç"

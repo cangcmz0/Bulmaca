@@ -39,6 +39,10 @@ const STRINGS = {
     bossWin: 'Boss yenildi!',
     bossReward: '+1 ipucu kazandın',
     tripleReward: 'Reklam izle, 3 katı ipucu',
+    master: 'Usta',
+    finalTitle: 'Efsane!',
+    finalText: '8000 seviyenin hepsini bitirdin! Usta Modu açıldı, seviyeler sonsuza dek devam ediyor.',
+    toMaster: 'Usta Modu',
   },
   en: {
     title: 'Cat Escape',
@@ -80,6 +84,10 @@ const STRINGS = {
     bossWin: 'Boss beaten!',
     bossReward: '+1 hint earned',
     tripleReward: 'Watch ad, triple it',
+    master: 'Master',
+    finalTitle: 'Legendary!',
+    finalText: 'You beat all 8000 levels! Master Mode unlocked: levels go on forever.',
+    toMaster: 'Master Mode',
   },
 } as const;
 

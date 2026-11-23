@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dailyLevel, generateLevel } from './generator';
+import { TOTAL_LEVELS, dailyLevel, generateLevel, kindFor } from './generator';
 import { solve } from './solver';
 import { idx } from './types';
 
@@ -36,6 +36,19 @@ describe('generateLevel', () => {
     const early = avg(5, 14), mid = avg(51, 60), late = avg(301, 310);
     expect(mid).toBeGreaterThan(early);
     expect(late).toBeGreaterThan(mid);
+  });
+
+  it('keeps getting harder right up to level 8000', () => {
+    const chain = (from: number) => {
+      let s = 0;
+      for (let n = from; n < from + 10; n++) { const l = generateLevel(n); s += solve(l.w, l.h, l.cats).depth / l.cats.length; }
+      return s / 10;
+    };
+    const perCat = (n: number) => { const l = generateLevel(n); return l.timeLimit! / l.cats.length; };
+    expect(chain(2001)).toBeGreaterThan(chain(501));
+    expect(chain(7991)).toBeGreaterThan(chain(4001));
+    expect(perCat(7994)).toBeLessThan(perCat(3994));
+    expect(kindFor(TOTAL_LEVELS)).toBe('boss');
   });
 
   it('generates very high levels quickly and solvably', () => {

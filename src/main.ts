@@ -4,7 +4,7 @@ import '@fontsource/fredoka/latin-600.css';
 import '@fontsource/fredoka/latin-ext-600.css';
 import './style.css';
 import { GameState } from './core/game';
-import { dailyLevel, generateLevel, kindFor } from './core/generator';
+import { TOTAL_LEVELS, dailyLevel, generateLevel, kindFor } from './core/generator';
 import { Key, LANG, t } from './i18n';
 import { ads } from './platform/ads';
 import { sfx, vibrate } from './platform/audio';
@@ -36,6 +36,11 @@ const fails = new Map<number, number>();
 
 // ---------------------------------------------------------------- screens
 
+/** Levels past 8000 are "Master Mode" so the advertised count stays honest. */
+function levelName(n: number): string {
+  return n > TOTAL_LEVELS ? `${t('master')} ${n - TOTAL_LEVELS}` : `${t('level')} ${n}`;
+}
+
 function showScreen(id: 'home' | 'game'): void {
   $('home').classList.toggle('hidden', id !== 'home');
   $('game').classList.toggle('hidden', id !== 'game');
@@ -46,7 +51,8 @@ function refreshHome(): void {
   applyTheme(themeFor(data.level));
   const k = kindFor(data.level);
   const tag = k === 'hard' || k === 'boss' ? ` · ${t(k)}` : '';
-  $('play-level').textContent = `${t('level')} ${data.level}${tag}`;
+  const of = data.level <= TOTAL_LEVELS ? ` / ${TOTAL_LEVELS}` : '';
+  $('play-level').textContent = `${levelName(data.level)}${of}${tag}`;
   const doneToday = data.dailyDone === todayKey();
   $('daily-label').textContent = doneToday ? t('dailyDone') : t('daily');
   const streakAlive = data.dailyDone === todayKey() || data.dailyDone === yesterdayKey();
@@ -76,7 +82,7 @@ function startLevel(n: number): void {
   applyTheme(theme);
   showScreen('game');
   renderer.setState(state, theme);
-  $('level-label').textContent = isDaily ? t('daily') : `${t('level')} ${n}`;
+  $('level-label').textContent = isDaily ? t('daily') : levelName(n);
   setTip(n === 1 ? 'tutorial1' : null);
   renderHearts();
   renderProgress();
@@ -213,7 +219,12 @@ function finishWin(): void {
   renderHints();
   window.setTimeout(() => {
     const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('');
-    if (isDaily) {
+    if (n === TOTAL_LEVELS) {
+      openModal(art, t('finalTitle'), t('finalText'), [
+        { label: t('toMaster'), primary: true, run: () => void nextLevel(n + 1) },
+        { label: t('home'), run: goHome },
+      ]);
+    } else if (isDaily) {
       openModal(art, t('winDaily'), data.streak > 0 ? `🔥 ${data.streak} ${t('streak')}` : '', [
         { label: t('home'), primary: true, run: goHome },
       ]);
