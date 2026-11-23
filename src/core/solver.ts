@@ -99,6 +99,14 @@ export interface Search {
  * only branches while spin cats are on the board. Failed states are memoised.
  */
 export function findSolution(w: number, h: number, cats: readonly Cat[], exits0 = 0, limit = 30000): Search {
+  // Two move orders, each with half the budget: when one gets lost in a big subtree the other
+  // usually walks straight to a win.
+  const a = searchOnce(w, h, cats, exits0, Math.ceil(limit / 2), 'spinFirst');
+  if (a.path || a.complete) return a;
+  return searchOnce(w, h, cats, exits0, Math.ceil(limit / 2), 'plainFirst');
+}
+
+function searchOnce(w: number, h: number, cats: readonly Cat[], exits0: number, limit: number, mode: 'spinFirst' | 'plainFirst'): Search {
   const n = cats.length;
   const grid = new Int32Array(w * h).fill(-1);
   cats.forEach((c, i) => (grid[idx(w, c.x, c.y)] = i));
@@ -156,8 +164,9 @@ export function findSolution(w: number, h: number, cats: readonly Cat[], exits0 
     }
     // Clear the cats in the most paths first: that opens the board fastest.
     plain.sort((a, b) => onPath.get(b)! - onPath.get(a)!);
-    cand.push(...plain);
-    if (token !== -1) cand.push(token);
+    if (token !== -1) plain.push(token);
+    if (mode === 'spinFirst') cand.push(...plain);
+    else cand.unshift(...plain);
     for (const i of cand) {
       const cell = idx(w, cats[i].x, cats[i].y);
       alive[i] = 0; grid[cell] = -1; order.push(i);

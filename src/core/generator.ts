@@ -1,5 +1,5 @@
 import { Rng, hashSeed } from './rng';
-import { dirAt, firstBlocker, greedyOrder, occupancy, solve, stuckRate } from './solver';
+import { dirAt, findSolution, firstBlocker, greedyOrder, occupancy, solve, stuckRate } from './solver';
 import { Cat, CatKind, Dir, DX, DY, Level, idx } from './types';
 
 export const COAT_COUNT = 6;
@@ -409,6 +409,14 @@ export function generateLevel(n: number, salt = 0): Level {
     const again = addSpinCats(new Rng(hashSeed(n, salt, 0x7370696e, tryNo)), p.w, p.h, best, counts.spin, goalStuck);
     if (Math.abs(again.stuck - goalStuck) < Math.abs(spun.stuck - goalStuck)) spun = again;
   }
+  // Every shipped level must be solvable by the in-game hint search from the start; if this pick
+  // of spin cats sends the search astray, try other picks, then fewer spin cats.
+  const searchable = (list: Cat[]) => findSolution(p.w, p.h, list).path !== null;
+  for (let tryNo = 3; tryNo < 9 && counts.spin > 0 && !searchable(spun.cats); tryNo++) {
+    const fewer = tryNo < 6 ? counts.spin : Math.max(1, counts.spin - (tryNo - 5));
+    spun = addSpinCats(new Rng(hashSeed(n, salt, 0x7370696e, tryNo)), p.w, p.h, best, fewer, goalStuck);
+  }
+  if (!searchable(spun.cats)) spun = { cats: best, stuck: 0 }; // last resort: no spin cats
   best = spun.cats;
   // Spin cats need thinking time, so each buys a few seconds of clock.
   const extra = counts.spin * 3;
