@@ -193,6 +193,19 @@ export function drawCat(ctx: CanvasRenderingContext2D, coat: Coat, p: CatPose): 
       ctx.moveTo(ex - r, ey - r); ctx.lineTo(ex + r, ey + r);
       ctx.moveTo(ex + r, ey - r); ctx.lineTo(ex - r, ey + r);
       ctx.stroke();
+    } else if (p.sweat) {
+      // shocked: big white eyes with tiny pupils, unmistakable even on a small board
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = lw * 0.8;
+      ctx.beginPath();
+      ctx.arc(ex, ey, s * 0.062, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#1d1715';
+      ctx.beginPath();
+      ctx.arc(ex, ey, s * 0.02, 0, Math.PI * 2);
+      ctx.fill();
     } else if (p.blink) {
       ctx.strokeStyle = OUTLINE;
       ctx.lineWidth = lw;
@@ -252,6 +265,16 @@ export function drawCat(ctx: CanvasRenderingContext2D, coat: Coat, p: CatPose): 
       ctx.lineTo(side * s * 0.14, ey - s * 0.11);
       ctx.stroke();
     }
+    // blue shock lines across the forehead
+    ctx.strokeStyle = '#4a7dff';
+    ctx.lineWidth = Math.max(1.5, s * 0.022);
+    for (const xx of [-0.09, -0.03, 0.03, 0.09]) {
+      ctx.beginPath();
+      ctx.moveTo(s * xx, hy - s * 0.19);
+      ctx.lineTo(s * xx, hy - s * 0.12);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = OUTLINE;
     // sweat drop
     const dx = s * 0.27, dy = hy - s * 0.12;
     ctx.fillStyle = '#5bb8ff';

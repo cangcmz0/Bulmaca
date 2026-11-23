@@ -14,6 +14,8 @@ export interface SaveData {
   giftDay: string | null;
   /** Levels won in total, drives the bonus offer cadence. */
   wins: number;
+  /** How many times each special-cat reminder tip has been shown. */
+  reminders: Record<string, number>;
 }
 
 const KEY = 'kedi-kacisi-save-v1';
@@ -30,6 +32,7 @@ const DEFAULTS: SaveData = {
   seenKinds: [],
   giftDay: null,
   wins: 0,
+  reminders: {},
 };
 
 export function load(): SaveData {

@@ -96,7 +96,7 @@ function startLevel(n: number): void {
   showScreen('game');
   renderer.setState(state, theme);
   $('level-label').textContent = isDaily ? t('daily') : levelName(n);
-  setTip(n === 1 ? 'tutorial1' : null);
+  setTip(n === 1 ? 'tutorial1' : reminderFor(level));
   renderHearts();
   renderProgress();
   renderHints();
@@ -195,6 +195,23 @@ async function watchRewarded(): Promise<boolean> {
   const ok = await ads.showRewarded();
   if (ok) pacing.rewardedWatched();
   return ok;
+}
+
+/**
+ * For the first levels after a special cat is introduced, a one-line reminder of its rule. Rules
+ * that look like bugs when forgotten (scared cats run backwards) come first.
+ */
+function reminderFor(level: { cats: Cat[] }): Key | null {
+  if (isDaily) return null;
+  const has = (k: CatKind) => level.cats.some((c) => c.kind === k);
+  const order: [CatKind, Key][] = [['scared', 'remindScared'], ['spin', 'remindSpin'], ['sleepy', 'remindSleepy']];
+  for (const [kind, key] of order) {
+    if (!has(kind) || (data.reminders[kind] ?? 0) >= 10) continue;
+    data.reminders[kind] = (data.reminders[kind] ?? 0) + 1;
+    save(data);
+    return key;
+  }
+  return null;
 }
 
 function setTip(key: Key | null): void {
@@ -596,4 +613,12 @@ if (jump > 0) {
   const s = Number(params.get('time'));
   const st = state as GameState | null; // assigned inside startLevel, TS can't see it
   if (s > 0 && st && st.timeLeft !== null) st.timeLeft = s;
+}
+// Test hook for automated QA (?debug=1): exposes the live game to the test runner.
+if (params.get('debug') === '1') {
+  (window as unknown as Record<string, unknown>).__kk = {
+    get state() { return state; },
+    renderer,
+    start: (n: number) => startLevel(n),
+  };
 }

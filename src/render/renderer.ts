@@ -199,7 +199,7 @@ export class BoardRenderer {
     const list = [...this.vcats.values()];
     const exits = this.state.exits;
     for (const v of list) {
-      if (v.kind === 'spin') v.turn += (exits - v.turn) * Math.min(1, dt * 12);
+      if (v.kind === 'spin') v.turn += (exits - v.turn) * Math.min(1, dt * 20);
       this.update(v, now);
     }
     list.sort((a, b) => (a.mode === 'idle' ? 0 : 1) - (b.mode === 'idle' ? 0 : 1) || a.cell.y - b.cell.y);
@@ -218,6 +218,13 @@ export class BoardRenderer {
   }
 
   /** Current gaze angle in quarter turns; spin cats swing round smoothly after each exit. */
+  /** Test hook: the quarter turn a cat is drawn facing (0-3), or null if it is moving/asleep. */
+  gazeOf(id: number): number | null {
+    const v = this.vcats.get(id);
+    if (!v || v.mode !== 'idle' || (v.kind === 'sleepy' && this.state?.asleep.has(id))) return null;
+    return ((Math.round(this.gaze(v)) % 4) + 4) % 4;
+  }
+
   private gaze(v: VCat): number {
     if (v.kind !== 'spin') return v.dir;
     return v.mode === 'idle' ? v.dir + v.turn : v.run; // a moving spin cat faces where it goes
@@ -294,6 +301,14 @@ export class BoardRenderer {
     const { px, py } = this.center(v.cell.x + DX[v.run] * v.offset, v.cell.y + DY[v.run] * v.offset);
     let sx = 0;
     if (now < v.shakeUntil) sx = Math.sin(now / 20) * cs * 0.06 * ((v.shakeUntil - now) / 350);
+    if (v.kind === 'scared' && v.mode === 'idle') {
+      // scared cats tremble and sit on a pale blue patch so they stand out at a glance
+      sx += Math.sin(now / 16 + v.phase) * cs * 0.022;
+      this.ctx.fillStyle = 'rgba(90, 160, 255, 0.28)';
+      this.ctx.beginPath();
+      this.ctx.arc(px, py, cs * 0.44, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
     const idle = v.mode === 'idle';
     const breathe = idle ? 1 + Math.sin(now / 650 + v.phase) * 0.025 : 1;
     let stretch = 1;
