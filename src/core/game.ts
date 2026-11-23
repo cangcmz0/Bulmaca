@@ -1,0 +1,93 @@
+import { firstBlocker, freeCats, occupancy } from './solver';
+import { Cat, DX, DY, Level, idx } from './types';
+
+export const START_LIVES = 3;
+
+export type TapResult =
+  | { kind: 'none' }
+  | { kind: 'exit'; cat: Cat }
+  | { kind: 'bump'; cat: Cat; blocker: Cat; /** cells the cat travels before hitting */ steps: number };
+
+/** Pure game rules, no rendering. The renderer animates whatever this returns. */
+export class GameState {
+  readonly level: Level;
+  cats: Map<number, Cat>;
+  lives = START_LIVES;
+  mistakes = 0;
+  readonly total: number;
+
+  constructor(level: Level) {
+    this.level = level;
+    this.cats = new Map(level.cats.map((c) => [c.id, { ...c }]));
+    this.total = level.cats.length;
+  }
+
+  get won(): boolean {
+    return this.cats.size === 0;
+  }
+
+  get lost(): boolean {
+    return this.lives <= 0 && !this.won;
+  }
+
+  catAt(x: number, y: number): Cat | undefined {
+    for (const c of this.cats.values()) if (c.x === x && c.y === y) return c;
+    return undefined;
+  }
+
+  tap(x: number, y: number): TapResult {
+    if (this.won || this.lost) return { kind: 'none' };
+    const cat = this.catAt(x, y);
+    if (!cat) return { kind: 'none' };
+    const { w, h } = this.level;
+    const list = [...this.cats.values()];
+    const grid = occupancy(w, h, list);
+    const blockerId = firstBlocker(w, h, grid, cat);
+    if (blockerId === -1) {
+      this.cats.delete(cat.id);
+      return { kind: 'exit', cat };
+    }
+    const blocker = this.cats.get(blockerId)!;
+    const steps = Math.abs(blocker.x - cat.x) + Math.abs(blocker.y - cat.y) - 1;
+    this.lives--;
+    this.mistakes++;
+    return { kind: 'bump', cat, blocker, steps };
+  }
+
+  /** A cat that can leave right now (any free cat is always a safe move). */
+  hint(): Cat | undefined {
+    const free = freeCats(this.level.w, this.level.h, [...this.cats.values()]);
+    if (free.length === 0) return undefined;
+    // Prefer the free cat that unblocks the most others, it feels like a smarter hint.
+    const { w, h } = this.level;
+    let best = free[0];
+    let bestScore = -1;
+    for (const f of free) {
+      let score = 0;
+      for (const c of this.cats.values()) {
+        if (c.id === f.id) continue;
+        let x = c.x + DX[c.dir], y = c.y + DY[c.dir];
+        while (x >= 0 && y >= 0 && x < w && y < h) {
+          const o = [...this.cats.values()].find((k) => k.x === x && k.y === y);
+          if (o) { if (o.id === f.id) score++; break; }
+          x += DX[c.dir]; y += DY[c.dir];
+        }
+      }
+      if (score > bestScore) { bestScore = score; best = f; }
+    }
+    return best;
+  }
+
+  addLife(n = 1): void {
+    this.lives += n;
+  }
+
+  stars(): number {
+    return Math.max(1, 3 - this.mistakes);
+  }
+
+  isActive(x: number, y: number): boolean {
+    const { w, h, mask } = this.level;
+    return x >= 0 && y >= 0 && x < w && y < h && mask[idx(w, x, y)];
+  }
+}
