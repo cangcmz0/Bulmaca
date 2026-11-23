@@ -365,3 +365,26 @@ h1 {
 }
 
 .big-emoji { font-size: 60px; line-height: 1; }
+
+.card .ad-note {
+  margin: -8px 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.ad-notice {
+  position: absolute;
+  left: 50%;
+  bottom: calc(110px + var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 15;
+  padding: 12px 20px;
+  border-radius: 18px;
+  background: #2f2a33;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25);
+  animation: tipin 0.25s ease-out;
+}

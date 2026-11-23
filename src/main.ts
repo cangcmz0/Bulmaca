@@ -192,6 +192,12 @@ function clockRunning(now: number): boolean {
 }
 
 async function watchRewarded(): Promise<boolean> {
+  // Always tell the player an ad is coming, never spring it on them.
+  const notice = $('ad-notice');
+  notice.textContent = t('adStarting');
+  notice.classList.remove('hidden');
+  await new Promise((r) => window.setTimeout(r, 1100));
+  notice.classList.add('hidden');
   const ok = await ads.showRewarded();
   if (ok) pacing.rewardedWatched();
   return ok;
@@ -214,7 +220,9 @@ function reminderFor(level: { cats: Cat[] }): Key | null {
   return null;
 }
 
+let tipKey: Key | null = null;
 function setTip(key: Key | null): void {
+  tipKey = key;
   const tip = $('tip');
   tip.classList.toggle('hidden', !key);
   if (key) tip.textContent = t(key);
@@ -268,8 +276,9 @@ $('board').addEventListener('pointerdown', (e) => {
       const { px, py } = renderer.cellCenter(res.cat.x, res.cat.y);
       renderer.floatText(px, py - 20, label, combo >= 10 ? '#ff6fa8' : combo >= 6 ? '#ffcf4a' : '#ffffff');
     }
+    if (tipKey === 'wrongMove') setTip(null);
     if (state.won) winPending = true;
-    else if (state.stuck) window.setTimeout(() => showLose(), 750);
+    else scheduleTrapCheck();
   } else if (res.kind === 'bump') {
     combo = 0;
     renderer.bump(res.cat, res.dir, res.steps);
@@ -377,21 +386,13 @@ function showLose(firstTime = true): void {
   if (!state || !state.lost) return;
   const n = state.level.number;
   const reason = state.loseReason;
+  if (reason === 'stuck') { showTrapped(firstTime); return; }
   if (firstTime) {
     sfx.lose();
     fails.set(n, (fails.get(n) ?? 0) + 1);
   }
   const actions: Action[] = [];
-  if (reason === 'stuck') {
-    actions.push({
-      label: t('watchUndo'), primary: true,
-      run: async () => {
-        closeModal();
-        if (await watchRewarded()) undoToWinnable();
-        else showLose(false);
-      },
-    });
-  } else if (reason === 'time') {
+  if (reason === 'time') {
     actions.push({
       label: t('watchTime'), primary: true,
       run: async () => {
@@ -438,7 +439,6 @@ function showLose(firstTime = true): void {
   });
   const copy: Record<string, [string, Key, Key]> = {
     time: ['<span class="big-emoji">⏰</span>', 'timeUpTitle', 'timeUpText'],
-    stuck: ['<span class="big-emoji">🌀</span>', 'stuckTitle', 'stuckText'],
     lives: [icons.brokenHeart, 'loseTitle', 'loseText'],
   };
   const [art, title, text] = copy[reason ?? 'lives'];
@@ -452,13 +452,74 @@ function showLose(firstTime = true): void {
 function undoToWinnable(): void {
   if (!state) return;
   let guard = state.history.length;
+  let culprit: Cat | undefined;
   do {
     const c = state.undo();
     if (!c) break;
     renderer.restore(c);
+    culprit = c;
   } while (guard-- > 0 && state.hint().kind === 'doomed');
+  // The last cat put back is the move that sealed the trap: mark it so the player tries elsewhere.
+  if (culprit) {
+    renderer.markWrong(culprit);
+    setTip('wrongMove');
+  }
   renderProgress();
   sfx.hint();
+}
+
+let trapCheck = 0;
+/**
+ * Right after a move, check whether it left the level unwinnable (spin cats locked so no order
+ * can finish). If so, say it straight away instead of letting the player play on for nothing.
+ */
+function scheduleTrapCheck(): void {
+  if (!state) return;
+  const token = ++trapCheck;
+  const exits = state.exits;
+  const spinsLeft = [...state.cats.values()].some((c) => c.kind === 'spin');
+  if (!spinsLeft && !state.stuck) return; // without spin cats the order can't trap you
+  window.setTimeout(() => {
+    if (!state || token !== trapCheck || state.exits !== exits || state.won || winPending) return;
+    if (!$('modal').classList.contains('hidden') || !$('ad').classList.contains('hidden')) return;
+    if (state.stuck || state.hint().kind === 'doomed') showTrapped(true);
+  }, 650);
+}
+
+function showTrapped(firstTime: boolean): void {
+  if (!state) return;
+  const n = state.level.number;
+  if (firstTime) {
+    sfx.lose();
+    vibrate(80);
+    fails.set(n, (fails.get(n) ?? 0) + 1);
+  }
+  const actions: Action[] = [{
+    label: t('watchUndo'), primary: true,
+    run: async () => {
+      closeModal();
+      if (await watchRewarded()) undoToWinnable();
+      else showTrapped(false);
+    },
+  }];
+  const tough = state.level.kind === 'hard' || state.level.kind === 'boss';
+  if (!isDaily && tough && (fails.get(n) ?? 0) >= MONET.skipAfterFails) {
+    actions.push({
+      label: t('skip'),
+      run: async () => {
+        closeModal();
+        if (await watchRewarded()) {
+          data.stars[n] = Math.max(data.stars[n] ?? 0, 1);
+          data.level = Math.max(data.level, n + 1);
+          fails.delete(n);
+          save(data);
+          startLevel(n + 1);
+        } else showTrapped(false);
+      },
+    });
+  }
+  actions.push({ label: t('retry'), run: () => { closeModal(); startLevel(n); } });
+  openModal('<span class="big-emoji">🪤</span>', t('trappedTitle'), t('trappedText'), actions, t('trappedAdNote'));
 }
 
 $('hint-btn').addEventListener('click', () => {
@@ -467,11 +528,7 @@ $('hint-btn').addEventListener('click', () => {
   const h = state.hint();
   if (h.kind === 'doomed') {
     // Spin cats are turned so that no order can win from here: say so instead of burning a hint.
-    openModal('<span class="big-emoji">🌀</span>', t('doomedTitle'), t('doomedText'), [
-      { label: t('watchUndo'), primary: true, run: async () => { closeModal(); if (await watchRewarded()) undoToWinnable(); } },
-      { label: t('retry'), run: () => { closeModal(); startLevel(state!.level.number); } },
-      { label: t('cancel'), run: closeModal },
-    ]);
+    showTrapped(false);
     return;
   }
   if (data.hints > 0) {
@@ -564,12 +621,15 @@ $('sound-btn').addEventListener('click', () => {
 
 interface Action { label: string; primary?: boolean; run: () => void | Promise<void> }
 
-function openModal(artHtml: string, title: string, text: string, actions: Action[]): void {
+function openModal(artHtml: string, title: string, text: string, actions: Action[], note = ''): void {
   $('modal-art').innerHTML = artHtml;
   $('modal-title').textContent = title;
   const p = $('modal-text');
   p.textContent = text;
   p.hidden = !text;
+  const nt = $('modal-note');
+  nt.textContent = note;
+  nt.hidden = !note;
   const box = $('modal-actions');
   box.innerHTML = '';
   for (const a of actions) {

@@ -65,6 +65,8 @@ export class BoardRenderer {
   private hintUntil = 0;
   private last = performance.now();
   private flashUntil = 0;
+  private wrongId = -1;
+  private wrongUntil = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -230,6 +232,12 @@ export class BoardRenderer {
     return v.mode === 'idle' ? v.dir + v.turn : v.run; // a moving spin cat faces where it goes
   }
 
+  /** Marks the cat whose move sealed a trap, so the player tries something else. */
+  markWrong(cat: Cat): void {
+    this.wrongId = cat.id;
+    this.wrongUntil = performance.now() + 7000;
+  }
+
   /** Brings a cat back after an undo, with a little pop. */
   restore(cat: Cat): void {
     const now = performance.now();
@@ -333,6 +341,32 @@ export class BoardRenderer {
       running: v.mode === 'idle' ? 0 : 1,
     };
     drawCat(this.ctx, coat, pose);
+    if (v.id === this.wrongId && idle && now < this.wrongUntil) this.drawWrong(px, py, now);
+  }
+
+  private drawWrong(px: number, py: number, now: number): void {
+    const ctx = this.ctx, cs = this.cs;
+    const pulse = 0.5 + 0.5 * Math.sin(now / 140);
+    ctx.strokeStyle = `rgba(255, 70, 90, ${0.55 + 0.45 * pulse})`;
+    ctx.lineWidth = Math.max(3, cs * 0.07);
+    ctx.beginPath();
+    ctx.arc(px, py, cs * 0.46, 0, Math.PI * 2);
+    ctx.stroke();
+    // ✕ badge on the top-right corner
+    const bx = px + cs * 0.32, by = py - cs * 0.32, r = cs * 0.15;
+    ctx.fillStyle = '#ff465a';
+    ctx.strokeStyle = '#4a3530';
+    ctx.lineWidth = Math.max(1.5, cs * 0.03);
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(2, cs * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(bx - r * 0.45, by - r * 0.45); ctx.lineTo(bx + r * 0.45, by + r * 0.45);
+    ctx.moveTo(bx + r * 0.45, by - r * 0.45); ctx.lineTo(bx - r * 0.45, by + r * 0.45);
+    ctx.stroke();
   }
 
   private drawHint(now: number): void {
