@@ -25,6 +25,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 const data = load();
 sfx.enabled = data.sound;
+sfx.musicEnabled = data.music;
 haptics.enabled = data.vibration;
 
 /** Hosted privacy policy (docs/privacy-policy.html via GitHub Pages). */
@@ -36,9 +37,9 @@ $('back-btn').innerHTML = icons.back;
 document.querySelector('.hint-icon')!.innerHTML = icons.bulb;
 
 const renderer = new BoardRenderer($<HTMLCanvasElement>('board'));
-const scene = new HomeScene($<HTMLCanvasElement>('home-scene'), (kind) => {
+const scene = new HomeScene($<HTMLCanvasElement>('home-scene'), (kind, coat) => {
   sfx.unlock();
-  if (kind === 'meow') sfx.meow();
+  if (kind === 'meow') sfx.mew(coat);
   else sfx.hint();
   vibrate(10);
 });
@@ -273,7 +274,7 @@ $('board').addEventListener('pointerdown', (e) => {
     renderWake();
   } else if (res.kind === 'exit') {
     renderer.exit(res.cat, res.dir);
-    sfx.pop();
+    sfx.escape(res.cat.coat);
     vibrate(8);
     renderProgress();
     const now = performance.now();
@@ -291,7 +292,7 @@ $('board').addEventListener('pointerdown', (e) => {
     combo = 0;
     renderer.bump(res.cat, res.dir, res.steps);
     const delay = Math.max(60, (res.steps / 16) * 1000);
-    window.setTimeout(() => { sfx.meow(); vibrate(60); renderHearts(state!.lives); }, delay);
+    window.setTimeout(() => { sfx.bump(res.cat.coat); vibrate(60); renderHearts(state!.lives); }, delay);
     if (state.level.number === 1) setTip('tutorial2');
     if (state.lost) window.setTimeout(() => showLose(), 900);
   }
@@ -725,6 +726,10 @@ function openSettings(): void {
       run: () => { data.sound = !data.sound; sfx.enabled = data.sound; save(data); sfx.unlock(); sfx.click(); openSettings(); },
     },
     {
+      label: `🎵 ${t('music')}: ${onOff(data.music)}`,
+      run: () => { data.music = !data.music; save(data); sfx.unlock(); sfx.setMusic(data.music); openSettings(); },
+    },
+    {
       label: `📳 ${t('vibration')}: ${onOff(data.vibration)}`,
       run: () => { data.vibration = !data.vibration; haptics.enabled = data.vibration; save(data); vibrate(30); openSettings(); },
     },
@@ -765,6 +770,7 @@ if (Capacitor.isNativePlatform()) {
     window.setTimeout(() => notice.classList.add('hidden'), 1800);
   });
   void App.addListener('pause', () => sfx.suspend());
+  void App.addListener('resume', () => sfx.resume());
 }
 
 // ---------------------------------------------------------------- modal

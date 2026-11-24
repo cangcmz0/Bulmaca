@@ -4,6 +4,7 @@ export interface SaveData {
   hints: number;
   sound: boolean;
   vibration: boolean;
+  music: boolean;
   noAds: boolean;
   /** YYYY-MM-DD of the last solved daily puzzle */
   dailyDone: string | null;
@@ -31,6 +32,7 @@ const DEFAULTS: SaveData = {
   hints: 3,
   sound: true,
   vibration: true,
+  music: true,
   noAds: false,
   dailyDone: null,
   streak: 0,

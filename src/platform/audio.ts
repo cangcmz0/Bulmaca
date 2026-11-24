@@ -1,99 +1,125 @@
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { MusicPlayer } from './music';
+import { grumpyMrrow, happyMew, pop, tone } from './synth';
 
-/** Tiny WebAudio synth: no audio files to ship, every sound is generated. */
+/**
+ * Game audio, fully synthesised (no audio files to ship): sound effects and cat voices on one
+ * bus, the background music on another, each with its own on/off switch.
+ */
 class Sfx {
   private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
+  private sfxBus: GainNode | null = null;
+  private musicBus: GainNode | null = null;
+  private music: MusicPlayer | null = null;
   enabled = true;
+  musicEnabled = true;
   private combo = 0;
   private lastPop = 0;
+  private lastMew = 0;
 
-  /** Called when the app goes to the background, so no sound keeps the audio session alive. */
+  /** Called when the app goes to the background, so nothing keeps playing. */
   suspend(): void {
     void this.ctx?.suspend();
+  }
+
+  resume(): void {
+    if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
   /** Must be called from a user gesture on mobile browsers. */
   unlock(): void {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      this.resume();
       return;
     }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.5;
-    this.master.connect(this.ctx.destination);
+    const master = this.ctx.createGain();
+    master.gain.value = 0.8;
+    // a gentle compressor keeps overlapping meows from clipping
+    const comp = this.ctx.createDynamicsCompressor();
+    comp.threshold.value = -14;
+    comp.ratio.value = 4;
+    master.connect(comp).connect(this.ctx.destination);
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.gain.value = 0.6;
+    this.sfxBus.connect(master);
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.value = 0.5;
+    this.musicBus.connect(master);
+    this.music = new MusicPlayer(this.ctx, this.musicBus);
+    if (this.musicEnabled) this.music.start();
   }
 
-  private tone(freq: number, dur: number, type: OscillatorType, vol: number, glideTo?: number, delay = 0): void {
-    if (!this.enabled || !this.ctx || !this.master) return;
-    const t = this.ctx.currentTime + delay;
-    const o = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, t);
-    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.master);
-    o.start(t);
-    o.stop(t + dur + 0.02);
+  setMusic(on: boolean): void {
+    this.musicEnabled = on;
+    if (!this.music) return;
+    if (on) this.music.start();
+    else this.music.stop();
   }
 
-  /** Exit pop; pitch climbs when cats leave in quick succession. */
-  pop(): void {
+  private ready(): { ctx: AudioContext; out: GainNode } | null {
+    if (!this.enabled || !this.ctx || !this.sfxBus) return null;
+    return { ctx: this.ctx, out: this.sfxBus };
+  }
+
+  /** A cat escapes: a pop that climbs with quick combos, and a happy mew in its own voice. */
+  escape(coat: number): void {
+    const a = this.ready();
+    if (!a) return;
     const now = performance.now();
     this.combo = now - this.lastPop < 900 ? Math.min(this.combo + 1, 10) : 0;
     this.lastPop = now;
-    const base = 520 * Math.pow(2, this.combo / 12);
-    this.tone(base, 0.12, 'sine', 0.5, base * 1.8);
-    this.tone(base * 2, 0.06, 'triangle', 0.15, base * 3, 0.02);
+    const t = a.ctx.currentTime;
+    pop(a.ctx, a.out, t, this.combo);
+    // rapid tapping would turn into a choir: one mew per 120 ms is plenty
+    if (now - this.lastMew > 120) {
+      this.lastMew = now;
+      happyMew(a.ctx, a.out, t + 0.03, coat, 1 + this.combo * 0.025);
+    }
   }
 
-  meow(): void {
-    if (!this.enabled || !this.ctx || !this.master) return;
-    const t = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
-    const f = this.ctx.createBiquadFilter();
-    const g = this.ctx.createGain();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(480, t);
-    o.frequency.linearRampToValueAtTime(820, t + 0.1);
-    o.frequency.linearRampToValueAtTime(560, t + 0.38);
-    f.type = 'bandpass';
-    f.Q.value = 4;
-    f.frequency.setValueAtTime(900, t);
-    f.frequency.linearRampToValueAtTime(1800, t + 0.12);
-    f.frequency.linearRampToValueAtTime(1000, t + 0.38);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.6, t + 0.04);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
-    o.connect(f).connect(g).connect(this.master);
-    o.start(t);
-    o.stop(t + 0.45);
-    this.tone(90, 0.12, 'sine', 0.6, 50); // thud
+  /** A cat runs into another one: a grumpy mrrow and a thud. */
+  bump(coat: number): void {
+    const a = this.ready();
+    if (a) grumpyMrrow(a.ctx, a.out, a.ctx.currentTime, coat);
+  }
+
+  /** Home screen cats answering a tap. */
+  mew(coat: number): void {
+    const a = this.ready();
+    if (a) happyMew(a.ctx, a.out, a.ctx.currentTime, coat, 1.05);
   }
 
   click(): void {
-    this.tone(880, 0.05, 'triangle', 0.25, 660);
+    const a = this.ready();
+    if (a) tone(a.ctx, a.out, a.ctx.currentTime, 880, 0.05, 'triangle', 0.25, 660);
   }
 
   win(): void {
-    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.35, undefined, i * 0.09));
-    this.tone(1568, 0.4, 'sine', 0.2, undefined, 0.36);
+    const a = this.ready();
+    if (!a) return;
+    const t = a.ctx.currentTime;
+    [523, 659, 784, 1047].forEach((f, i) => tone(a.ctx, a.out, t + i * 0.09, f, 0.22, 'triangle', 0.35));
+    tone(a.ctx, a.out, t + 0.36, 1568, 0.4, 'sine', 0.2);
+    happyMew(a.ctx, a.out, t + 0.5, 4, 1.1);
   }
 
   lose(): void {
-    [392, 330, 262].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.3, f * 0.94, i * 0.14));
+    const a = this.ready();
+    if (!a) return;
+    const t = a.ctx.currentTime;
+    [392, 330, 262].forEach((f, i) => tone(a.ctx, a.out, t + i * 0.14, f, 0.25, 'triangle', 0.3, f * 0.94));
   }
 
   hint(): void {
-    this.tone(1200, 0.15, 'sine', 0.25, 1600);
-    this.tone(1800, 0.2, 'sine', 0.15, 2400, 0.08);
+    const a = this.ready();
+    if (!a) return;
+    const t = a.ctx.currentTime;
+    tone(a.ctx, a.out, t, 1200, 0.15, 'sine', 0.25, 1600);
+    tone(a.ctx, a.out, t + 0.08, 1800, 0.2, 'sine', 0.15, 2400);
   }
 }
 

@@ -36,7 +36,7 @@ export class HomeScene {
     { fx: 0.85, fy: 0.78, fs: 0.38, coat: 5, sleepy: false, phase: 2.1, jumpAt: -1e9, awakeUntil: 0, blinkAt: 3200, lookAt: 1800, look: 0 },
   ];
 
-  constructor(private canvas: HTMLCanvasElement, private onTap: (kind: 'meow' | 'wake') => void) {
+  constructor(private canvas: HTMLCanvasElement, private onTap: (kind: 'meow' | 'wake', coat: number) => void) {
     this.ctx = canvas.getContext('2d')!;
     new ResizeObserver(() => this.resize()).observe(canvas);
     canvas.addEventListener('pointerdown', (e) => this.tap(e));
@@ -83,10 +83,10 @@ export class HomeScene {
       if (Math.hypot(x - p.x, y - p.y) > p.s * 0.45) continue;
       if (c.sleepy && now > c.awakeUntil) {
         c.awakeUntil = now + 2500;
-        this.onTap('wake');
+        this.onTap('wake', c.coat);
       } else {
         c.jumpAt = now;
-        this.onTap('meow');
+        this.onTap('meow', c.coat);
       }
       for (let i = 0; i < 6; i++) {
         this.hearts.push({
