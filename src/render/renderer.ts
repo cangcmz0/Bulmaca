@@ -16,6 +16,8 @@ interface VCat {
   wakeAt: number;
   /** Quarter turns shown for spin cats; eases towards the number of exits so far. */
   turn: number;
+  /** Set once an escaping cat has crossed the board edge. */
+  left?: boolean;
   coat: number;
   phase: number;
   blinkAt: number;
@@ -89,6 +91,9 @@ export class BoardRenderer {
     }
     this.resize();
   }
+
+  /** Called once per escaping cat, the moment it crosses the edge of the board. */
+  onCatLeave: ((coat: number) => void) | null = null;
 
   /** True while any cat is still on screen (exiting cats count). */
   get catsVisible(): number {
@@ -268,6 +273,14 @@ export class BoardRenderer {
     const t = (now - v.t0) / 1000;
     if (v.mode === 'exit') {
       v.offset = EXIT_V0 * t + 0.5 * EXIT_ACC * t * t;
+      if (!v.left && this.state) {
+        const cx = v.cell.x + DX[v.run] * v.offset, cy = v.cell.y + DY[v.run] * v.offset;
+        const { w, h } = this.state.level;
+        if (cx < -0.5 || cy < -0.5 || cx > w - 0.5 || cy > h - 0.5) {
+          v.left = true;
+          this.onCatLeave?.(v.coat);
+        }
+      }
       const { px, py } = this.center(v.cell.x + DX[v.run] * v.offset, v.cell.y + DY[v.run] * v.offset);
       if (now - v.lastDust > 45) {
         v.lastDust = now;

@@ -1,12 +1,12 @@
 import { Rng } from '../core/rng';
-import { noise, pluck } from './synth';
+import { pluck } from './synth';
 
 /**
- * Cosy lo-fi background music, generated on the fly: a soft pad, a round bass, a kalimba melody
- * and a whisper of a shaker over Fmaj7 – Dm7 – Bbmaj7 – C7. Every 8-bar phrase gets a new
- * melody from a seeded random walk on the pentatonic scale, so it never loops audibly.
+ * Calm background music, generated on the fly: a soft pad, a quiet bass and a sparse kalimba
+ * melody with a gentle echo, over Fmaj7 – Dm7 – Bbmaj7 – C7. No drums. Every 8-bar phrase gets a
+ * new melody from a seeded random walk on the pentatonic scale, so it never loops audibly.
  */
-const BPM = 84;
+const BPM = 68;
 const SPB = 60 / BPM; // seconds per beat
 const midi = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -19,7 +19,26 @@ const CHORDS: number[][] = [
 const SCALE = [65, 67, 69, 72, 74, 77, 79, 81]; // F major pentatonic
 
 export class MusicComposer {
-  constructor(private ctx: BaseAudioContext, private out: AudioNode) {}
+  /** The melody goes through a soft echo so the sparse notes hang in the air. */
+  private melodyBus: GainNode;
+
+  constructor(private ctx: BaseAudioContext, private out: AudioNode) {
+    this.melodyBus = ctx.createGain();
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2200;
+    const delay = ctx.createDelay(2);
+    delay.delayTime.value = SPB * 0.75;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.32;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+    this.melodyBus.connect(lp);
+    lp.connect(out);
+    lp.connect(delay);
+    delay.connect(fb).connect(delay);
+    delay.connect(wet).connect(out);
+  }
 
   /** Schedules every note of bar `bar` starting at time `t`. */
   scheduleBar(bar: number, t: number): void {
@@ -38,11 +57,11 @@ export class MusicComposer {
         o.detune.value = detune;
         const lp = ctx.createBiquadFilter();
         lp.type = 'lowpass';
-        lp.frequency.value = 900;
+        lp.frequency.value = 700;
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.022, t + 0.6);
-        g.gain.setValueAtTime(0.022, t + barLen - 0.4);
+        g.gain.exponentialRampToValueAtTime(0.015, t + 1.0);
+        g.gain.setValueAtTime(0.015, t + barLen - 0.6);
         g.gain.exponentialRampToValueAtTime(0.0001, t + barLen + 0.5);
         o.connect(lp).connect(g).connect(out);
         o.start(t);
@@ -50,7 +69,7 @@ export class MusicComposer {
       }
     }
 
-    // bass on beats 1 and 3
+    // a quiet bass on beats 1 and 3
     for (const beat of [0, 2]) {
       const o = ctx.createOscillator();
       o.type = 'sine';
@@ -58,20 +77,20 @@ export class MusicComposer {
       const g = ctx.createGain();
       const bt = t + beat * SPB;
       g.gain.setValueAtTime(0.0001, bt);
-      g.gain.exponentialRampToValueAtTime(0.16, bt + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.08, bt + 0.04);
       g.gain.exponentialRampToValueAtTime(0.0001, bt + SPB * 1.6);
       o.connect(g).connect(out);
       o.start(bt);
       o.stop(bt + SPB * 1.7);
     }
 
-    // melody: eighth-note grid, favouring chord tones on the beat
-    const quietBar = bar % 16 < 2; // the first bars of a section breathe
+    // melody: sparse eighth-note grid, favouring chord tones on the beat
+    const quietBar = bar % 8 < 2; // every phrase starts with two bars of just pad and bass
     let idx = 2 + Math.floor(rng.next() * 4);
     for (let e = 0; e < 8; e++) {
       if (quietBar) break;
       const onBeat = e % 2 === 0;
-      if (rng.next() > (onBeat ? 0.6 : 0.3)) continue;
+      if (rng.next() > (onBeat ? 0.42 : 0.12)) continue;
       idx = Math.max(0, Math.min(SCALE.length - 1, idx + [-2, -1, -1, 0, 1, 1, 2][rng.int(7)]));
       let m = SCALE[idx];
       if (onBeat && rng.next() < 0.5) {
@@ -79,37 +98,9 @@ export class MusicComposer {
         m = chord.map((c) => c + 12).reduce((a, b) => (Math.abs(b - m) < Math.abs(a - m) ? b : a));
       }
       const swing = onBeat ? 0 : SPB * 0.08;
-      pluck(ctx, out, t + e * SPB / 2 + swing, midi(m), 0.07 + rng.next() * 0.03, 0.9);
+      pluck(ctx, this.melodyBus, t + e * SPB / 2 + swing, midi(m), 0.045 + rng.next() * 0.015, 1.4);
     }
 
-    // shaker on the off-beats, a soft kick on 1 and the "and" of 3
-    for (let e = 1; e < 8; e += 2) {
-      const n = noise(ctx);
-      const hp = ctx.createBiquadFilter();
-      hp.type = 'highpass';
-      hp.frequency.value = 6500;
-      const g = ctx.createGain();
-      const st = t + e * SPB / 2 + SPB * 0.08;
-      g.gain.setValueAtTime(0.0001, st);
-      g.gain.exponentialRampToValueAtTime(0.018, st + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.06);
-      n.connect(hp).connect(g).connect(out);
-      n.start(st);
-      n.stop(st + 0.08);
-    }
-    for (const beat of [0, 2.5]) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const kt = t + beat * SPB;
-      o.frequency.setValueAtTime(110, kt);
-      o.frequency.exponentialRampToValueAtTime(42, kt + 0.12);
-      g.gain.setValueAtTime(0.0001, kt);
-      g.gain.exponentialRampToValueAtTime(0.14, kt + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001, kt + 0.2);
-      o.connect(g).connect(out);
-      o.start(kt);
-      o.stop(kt + 0.22);
-    }
   }
 
   static barLength(): number {
@@ -126,7 +117,7 @@ export class MusicPlayer {
   private nextTime = 0;
   playing = false;
 
-  constructor(private ctx: AudioContext, out: AudioNode, private volume = 0.55) {
+  constructor(private ctx: AudioContext, out: AudioNode, private volume = 0.9) {
     this.gain = ctx.createGain();
     this.gain.gain.value = 0;
     this.gain.connect(out);

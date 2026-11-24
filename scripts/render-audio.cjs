@@ -23,29 +23,30 @@ function wav(chL, chR, rate) {
   await p.goto('http://localhost:5173/');
   const res = await p.evaluate(async ({ kind, secs, events }) => {
     const { MusicComposer } = await import('/src/platform/music.ts');
-    const { happyMew, grumpyMrrow, pop, tone } = await import('/src/platform/synth.ts');
+    const { happyMew, grumpyMrrow, pop, tone, swish } = await import('/src/platform/synth.ts');
     const rate = 44100, len = Math.ceil(+secs * rate);
     const ctx = new OfflineAudioContext(2, len, rate);
     const master = ctx.createGain(); master.gain.value = 0.8;
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     master.connect(comp).connect(ctx.destination);
-    const musicBus = ctx.createGain(); musicBus.gain.value = kind === 'meows' ? 0 : 0.5; musicBus.connect(master);
+    const musicBus = ctx.createGain(); musicBus.gain.value = kind === 'meows' ? 0 : 0.4; musicBus.connect(master);
     const sfxBus = ctx.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
     if (kind !== 'meows') {
-      const comp2 = new MusicComposer(ctx, musicBus);
+      const musicVol = ctx.createGain(); musicVol.gain.value = 0.9; musicVol.connect(musicBus);
+      const comp2 = new MusicComposer(ctx, musicVol);
       for (let bar = 0, t = 0.05; t < +secs; bar++, t += MusicComposer.barLength()) comp2.scheduleBar(bar, t);
       // fade out over the last 1.5 s
-      musicBus.gain.setValueAtTime(0.5, +secs - 1.6); musicBus.gain.linearRampToValueAtTime(0, +secs - 0.1);
+      musicBus.gain.setValueAtTime(0.4, +secs - 1.6); musicBus.gain.linearRampToValueAtTime(0, +secs - 0.1);
     }
     if (kind === 'meows') {
-      for (let c = 0; c < 6; c++) happyMew(ctx, sfxBus, 0.2 + c * 0.6, c);
-      for (let c = 0; c < 3; c++) grumpyMrrow(ctx, sfxBus, 4.0 + c * 0.8, c * 2);
-      for (let i = 0; i < 8; i++) { pop(ctx, sfxBus, 6.6 + i * 0.18, i); happyMew(ctx, sfxBus, 6.63 + i * 0.18, i % 6, 1 + i * 0.025); }
+      for (let c = 0; c < 6; c++) happyMew(ctx, sfxBus, 0.2 + c * 0.65, c);
+      for (let c = 0; c < 3; c++) grumpyMrrow(ctx, sfxBus, 4.2 + c * 0.8, c * 2);
+      for (let i = 0; i < 6; i++) { swish(ctx, sfxBus, 6.6 + i * 0.3); happyMew(ctx, sfxBus, 6.85 + i * 0.3, i % 6, 1 + i * 0.02); }
     }
     // soundtrack events: "t:kind:coat:step" separated by commas
     for (const ev of events.split(',').filter(Boolean)) {
       const [t, k, coat, step] = ev.split(':');
-      if (k === 'e') { pop(ctx, sfxBus, +t, +step || 0); happyMew(ctx, sfxBus, +t + 0.03, +coat, 1 + (+step || 0) * 0.025); }
+      if (k === 'e') { swish(ctx, sfxBus, +t); happyMew(ctx, sfxBus, +t + 0.25, +coat, 1 + (+step || 0) * 0.02); }
       if (k === 'b') grumpyMrrow(ctx, sfxBus, +t, +coat);
       if (k === 'w') { [523, 659, 784, 1047].forEach((f, i) => tone(ctx, sfxBus, +t + i * 0.09, f, 0.22, 'triangle', 0.35)); tone(ctx, sfxBus, +t + 0.36, 1568, 0.4, 'sine', 0.2); happyMew(ctx, sfxBus, +t + 0.5, 4, 1.1); }
       if (k === 'l') [392, 330, 262].forEach((f, i) => tone(ctx, sfxBus, +t + i * 0.14, f, 0.25, 'triangle', 0.3, f * 0.94));

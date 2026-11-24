@@ -68,6 +68,11 @@
 - Kombo yazıları ekran kenarından taşmıyor
 - Tanıtım videoları (TR/EN, 1080×1920): `node scripts/make-videos.cjs`, ayrıntılar `store/VIDEOLAR.md`
 
+## ✅ v1.2.1: Ses ayarı
+- Dokununca sert "pıt" yerine hafif bir pati sesi var, miyav kedi tahtadan çıkarken duyuluyor
+- Miyavlar daha doğal (açılıp kapanan ağız filtresi, yumuşak ses kaynağı, akıcı perde eğrisi), çarpma sesi yumuşadı
+- Müzik daha sakin: 68 BPM, davul ve shaker yok, seyrek melodi ve hafif yankı, öncekinden ~8 dB kısık
+
 ## ⏭ Sonraki
 - Analitik (Firebase): D1/D7 tutma oranı, seviye bazında takılma noktaları
 - Uygulama içi değerlendirme isteği (In-App Review)

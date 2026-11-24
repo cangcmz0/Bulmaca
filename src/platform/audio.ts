@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { MusicPlayer } from './music';
-import { grumpyMrrow, happyMew, pop, tone } from './synth';
+import { grumpyMrrow, happyMew, swish, tone } from './synth';
 
 /**
  * Game audio, fully synthesised (no audio files to ship): sound effects and cat voices on one
@@ -47,7 +47,7 @@ class Sfx {
     this.sfxBus.gain.value = 0.6;
     this.sfxBus.connect(master);
     this.musicBus = this.ctx.createGain();
-    this.musicBus.gain.value = 0.5;
+    this.musicBus.gain.value = 0.4; // music sits well under the cats
     this.musicBus.connect(master);
     this.music = new MusicPlayer(this.ctx, this.musicBus);
     if (this.musicEnabled) this.music.start();
@@ -65,20 +65,25 @@ class Sfx {
     return { ctx: this.ctx, out: this.sfxBus };
   }
 
-  /** A cat escapes: a pop that climbs with quick combos, and a happy mew in its own voice. */
-  escape(coat: number): void {
+  /** A cat is tapped and starts to run: just a light swish, the meow comes as it leaves. */
+  escape(): void {
     const a = this.ready();
     if (!a) return;
     const now = performance.now();
     this.combo = now - this.lastPop < 900 ? Math.min(this.combo + 1, 10) : 0;
     this.lastPop = now;
-    const t = a.ctx.currentTime;
-    pop(a.ctx, a.out, t, this.combo);
-    // rapid tapping would turn into a choir: one mew per 120 ms is plenty
-    if (now - this.lastMew > 120) {
-      this.lastMew = now;
-      happyMew(a.ctx, a.out, t + 0.03, coat, 1 + this.combo * 0.025);
-    }
+    swish(a.ctx, a.out, a.ctx.currentTime);
+  }
+
+  /** The cat crosses the board edge: a happy mew in its own voice, a little higher in combos. */
+  leave(coat: number): void {
+    const a = this.ready();
+    if (!a) return;
+    const now = performance.now();
+    // rapid escapes would turn into a choir: one mew per 160 ms is plenty
+    if (now - this.lastMew < 160) return;
+    this.lastMew = now;
+    happyMew(a.ctx, a.out, a.ctx.currentTime, coat, 1 + this.combo * 0.02);
   }
 
   /** A cat runs into another one: a grumpy mrrow and a thud. */

@@ -37,6 +37,7 @@ $('back-btn').innerHTML = icons.back;
 document.querySelector('.hint-icon')!.innerHTML = icons.bulb;
 
 const renderer = new BoardRenderer($<HTMLCanvasElement>('board'));
+renderer.onCatLeave = (coat) => sfx.leave(coat);
 const scene = new HomeScene($<HTMLCanvasElement>('home-scene'), (kind, coat) => {
   sfx.unlock();
   if (kind === 'meow') sfx.mew(coat);
@@ -274,7 +275,7 @@ $('board').addEventListener('pointerdown', (e) => {
     renderWake();
   } else if (res.kind === 'exit') {
     renderer.exit(res.cat, res.dir);
-    sfx.escape(res.cat.coat);
+    sfx.escape();
     vibrate(8);
     renderProgress();
     const now = performance.now();

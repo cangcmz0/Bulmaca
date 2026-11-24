@@ -51,70 +51,97 @@ export interface MeowShape {
 }
 
 /**
- * A meow: a buzzy glottal source swept through moving formants, "m" (closed, dark) to "ee"
- * (bright) to "ow" (round), with the pitch rising then falling and a little breath noise.
+ * A meow, shaped like a real one: the mouth opens ("m"), the vowel brightens ("ee") and closes
+ * again ("ow"). A soft mix of triangle and sawtooth is the voice; formant filters and a lowpass
+ * that opens and closes with the "mouth" do the shaping; pitch glides up and back down smoothly.
  */
 export function meow(ctx: Ctx, out: AudioNode, t: number, s: MeowShape): void {
   const d = s.dur;
-  const src = ctx.createOscillator();
-  src.type = 'sawtooth';
-  src.frequency.setValueAtTime(s.pitch * 0.9, t);
-  src.frequency.linearRampToValueAtTime(s.pitch * s.rise, t + d * 0.35);
-  src.frequency.linearRampToValueAtTime(s.pitch * 0.82, t + d);
-  // vibrato
+  const curve = (pts: number[]) => {
+    // smooth pitch contour through the given ratios
+    const n = 64, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * (pts.length - 1), k = Math.min(pts.length - 2, Math.floor(x)), f = x - k;
+      const e = f * f * (3 - 2 * f);
+      c[i] = s.pitch * (pts[k] + (pts[k + 1] - pts[k]) * e);
+    }
+    return c;
+  };
+  const contour = curve([0.92, s.rise, s.rise * 0.97, 0.8]);
+  const voices: [OscillatorType, number][] = [['triangle', 0.7], ['sawtooth', 0.28]];
+  const mix = ctx.createGain();
+  const oscs: AudioScheduledSourceNode[] = [];
+  for (const [type, g] of voices) {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueCurveAtTime(contour, t, d);
+    const og = ctx.createGain();
+    og.gain.value = g;
+    o.connect(og).connect(mix);
+    oscs.push(o);
+  }
+  // gentle vibrato, only on the held part
   const vib = ctx.createOscillator();
   const vibAmt = ctx.createGain();
-  vib.frequency.value = 6.5;
-  vibAmt.gain.value = s.pitch * 0.025;
-  vib.connect(vibAmt).connect(src.frequency);
-
+  vib.frequency.value = 5.5;
+  vibAmt.gain.setValueAtTime(0, t);
+  vibAmt.gain.linearRampToValueAtTime(s.pitch * 0.018, t + d * 0.6);
+  vib.connect(vibAmt);
+  for (const o of oscs) vibAmt.connect((o as OscillatorNode).frequency);
+  oscs.push(vib);
+  // a breath of air
   const breath = noise(ctx);
-  const breathGain = ctx.createGain();
-  breathGain.gain.value = 0.12;
+  const bg = ctx.createGain();
+  bg.gain.value = 0.04;
+  breath.connect(bg).connect(mix);
+  oscs.push(breath);
 
-  const mix = ctx.createGain();
-  src.connect(mix);
-  breath.connect(breathGain).connect(mix);
-
-  // two formant bands moving through m → ee → ow
-  const bands: [number, number, number, number][] = [
-    // [start, peak, end, Q]
-    [450, 1100, 700, 6],
-    [1200, 2600, 1100, 8],
+  // formants: m → ee → ow
+  const shaped = ctx.createGain();
+  const bands: [number, number, number, number, number][] = [
+    // [start, peak, end, Q, gain]
+    [700, 1300, 750, 3, 1],
+    [1600, 2900, 1300, 5, 0.6],
+    [3500, 3800, 3300, 6, 0.15],
   ];
-  const vowel = env(ctx, t, d * 0.18, d * 0.42, d * 0.4, s.vol);
-  for (const [a, b, c, q] of bands) {
+  for (const [a, b2, c, q, g] of bands) {
     const f = ctx.createBiquadFilter();
     f.type = 'bandpass';
     f.Q.value = q;
     f.frequency.setValueAtTime(a, t);
-    f.frequency.linearRampToValueAtTime(b, t + d * 0.35);
+    f.frequency.linearRampToValueAtTime(b2, t + d * 0.3);
     f.frequency.linearRampToValueAtTime(c, t + d);
-    mix.connect(f).connect(vowel);
+    const fg = ctx.createGain();
+    fg.gain.value = g;
+    mix.connect(f).connect(fg).connect(shaped);
   }
-  // soft lowpass keeps it warm rather than buzzy
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 3200;
-  vowel.connect(lp);
+  // the "mouth": closed and dark at the start, open in the middle, rounding off at the end
+  const mouth = ctx.createBiquadFilter();
+  mouth.type = 'lowpass';
+  mouth.Q.value = 0.7;
+  mouth.frequency.setValueAtTime(500, t);
+  mouth.frequency.exponentialRampToValueAtTime(3800, t + d * 0.28);
+  mouth.frequency.exponentialRampToValueAtTime(1400, t + d);
+  shaped.connect(mouth);
+  const vol = env(ctx, t, d * 0.12, d * 0.5, d * 0.38, s.vol);
+  mouth.connect(vol);
 
-  let tail: AudioNode = lp;
+  let tail: AudioNode = vol;
   if (s.growl > 0) {
-    // grumpy "mrrrow": fast amplitude wobble
+    // grumpy "mrrrow": a soft purr-like wobble
     const trem = ctx.createGain();
     const lfo = ctx.createOscillator();
     const lfoAmt = ctx.createGain();
-    lfo.frequency.value = 28;
-    lfoAmt.gain.value = 0.5 * s.growl;
-    trem.gain.value = 1 - 0.5 * s.growl;
+    lfo.frequency.value = 24;
+    lfoAmt.gain.value = 0.35 * s.growl;
+    trem.gain.value = 1 - 0.35 * s.growl;
     lfo.connect(lfoAmt).connect(trem.gain);
-    lp.connect(trem);
+    vol.connect(trem);
     tail = trem;
-    lfo.start(t);
-    lfo.stop(t + d + 0.05);
+    oscs.push(lfo);
   }
   tail.connect(out);
-  for (const n of [src, vib, breath]) {
+  for (const n of oscs) {
     n.start(t);
     n.stop(t + d + 0.05);
   }
@@ -122,12 +149,12 @@ export function meow(ctx: Ctx, out: AudioNode, t: number, s: MeowShape): void {
 
 /** Per-coat voices, so every cat sounds a little different. */
 export const VOICES: MeowShape[] = [
-  { pitch: 620, dur: 0.26, rise: 1.35, growl: 0, vol: 0.55 }, // ginger
-  { pitch: 540, dur: 0.3, rise: 1.25, growl: 0, vol: 0.55 }, // grey tabby
-  { pitch: 720, dur: 0.24, rise: 1.4, growl: 0, vol: 0.5 }, // siamese, chatty and high
-  { pitch: 470, dur: 0.32, rise: 1.2, growl: 0, vol: 0.6 }, // black, deeper
-  { pitch: 800, dur: 0.22, rise: 1.45, growl: 0, vol: 0.5 }, // white kitten
-  { pitch: 660, dur: 0.27, rise: 1.3, growl: 0, vol: 0.55 }, // calico
+  { pitch: 600, dur: 0.42, rise: 1.3, growl: 0, vol: 0.9 }, // ginger
+  { pitch: 530, dur: 0.46, rise: 1.25, growl: 0, vol: 0.9 }, // grey tabby
+  { pitch: 690, dur: 0.38, rise: 1.35, growl: 0, vol: 0.85 }, // siamese, chatty and high
+  { pitch: 460, dur: 0.5, rise: 1.2, growl: 0, vol: 0.95 }, // black, deeper
+  { pitch: 780, dur: 0.34, rise: 1.4, growl: 0, vol: 0.8 }, // white kitten
+  { pitch: 640, dur: 0.4, rise: 1.3, growl: 0, vol: 0.9 }, // calico
 ];
 
 export function happyMew(ctx: Ctx, out: AudioNode, t: number, coat: number, pitchUp = 1): void {
@@ -137,8 +164,22 @@ export function happyMew(ctx: Ctx, out: AudioNode, t: number, coat: number, pitc
 
 export function grumpyMrrow(ctx: Ctx, out: AudioNode, t: number, coat: number): void {
   const v = VOICES[coat % VOICES.length];
-  meow(ctx, out, t, { pitch: v.pitch * 0.72, dur: 0.48, rise: 1.15, growl: 0.8, vol: 0.65 });
-  tone(ctx, out, t, 95, 0.12, 'sine', 0.5, 50); // the bump itself
+  meow(ctx, out, t, { pitch: v.pitch * 0.75, dur: 0.55, rise: 1.12, growl: 0.8, vol: 0.85 });
+  tone(ctx, out, t, 110, 0.08, 'sine', 0.18, 70); // a soft bump, not a hit
+}
+
+/** The tap itself: a light paw-pat swish instead of a hard hit. */
+export function swish(ctx: Ctx, out: AudioNode, t: number): void {
+  const n = noise(ctx);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(900, t);
+  bp.frequency.exponentialRampToValueAtTime(2600, t + 0.12);
+  const g = env(ctx, t, 0.02, 0.02, 0.1, 0.07);
+  n.connect(bp).connect(g).connect(out);
+  n.start(t);
+  n.stop(t + 0.2);
 }
 
 export function pop(ctx: Ctx, out: AudioNode, t: number, step: number): void {
@@ -150,5 +191,5 @@ export function pop(ctx: Ctx, out: AudioNode, t: number, step: number): void {
 /** Soft kalimba-like pluck: sine fundamental plus a quickly fading bright partial. */
 export function pluck(ctx: Ctx, out: AudioNode, t: number, freq: number, vol: number, len = 0.9): void {
   tone(ctx, out, t, freq, len, 'sine', vol);
-  tone(ctx, out, t, freq * 3.01, len * 0.18, 'sine', vol * 0.25);
+  tone(ctx, out, t, freq * 3.01, len * 0.12, 'sine', vol * 0.12);
 }
