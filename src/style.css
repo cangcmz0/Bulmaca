@@ -398,6 +398,9 @@ h1 {
   .btn-wake { padding: 6px 12px; }
   .btn-hint { padding: 6px 12px; }
 }
+/* same compact footer in the zoomed video-capture mode */
+html.narrow .btn-wake span:last-child { display: none; }
+html.narrow .btn-wake, html.narrow .btn-hint { padding: 6px 12px; }
 .progress { min-width: 0; }
 
 .home-top-right { display: flex; gap: 10px; }

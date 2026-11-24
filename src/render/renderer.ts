@@ -105,7 +105,9 @@ export class BoardRenderer {
     this.canvas.height = Math.round(r.height * this.dpr);
     if (!this.state) return;
     const { w, h } = this.state.level;
-    this.cs = Math.floor(Math.min(this.W / (w + 0.8), this.H / (h + 0.8), 92));
+    // Cells max out at 92 CSS px; under the capture zoom (?zoom=3) the cap scales with it.
+    const zoom = parseFloat(document.documentElement.style.zoom) || 1;
+    this.cs = Math.floor(Math.min(this.W / (w + 0.8), this.H / (h + 0.8), 92 * zoom));
     this.ox = Math.round((this.W - this.cs * w) / 2);
     this.oy = Math.round((this.H - this.cs * h) / 2);
     this.drawBoardCache();
@@ -150,6 +152,11 @@ export class BoardRenderer {
 
   /** Floating label, e.g. combo callouts. Positions are canvas px. */
   floatText(x: number, y: number, text: string, color: string, size = 0.45): void {
+    // keep long labels ("Legendary x10!") inside the board area instead of off the screen edge
+    const px = Math.max(16, this.cs * size);
+    this.ctx.font = `600 ${px}px Fredoka, system-ui, sans-serif`;
+    const half = this.ctx.measureText(text).width / 2 + px * 0.3;
+    x = Math.min(Math.max(x, half), this.W - half);
     this.particles.push({
       x, y, vx: 0, vy: -55, life: 0, max: 0.9, color, size: Math.max(16, this.cs * size),
       kind: 'text', rot: 0, vr: 0, text,

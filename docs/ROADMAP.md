@@ -62,6 +62,12 @@
 - Oyun içi mağaza, ipucuyla geri alma, can, süre, uyandırma ve seviye geçme, iki seviye arasında başlangıç paketi teklifi
 - Reklamsız sürüm yeni telefonda veya yeniden kurulumda otomatik geri yükleniyor
 
+## ✅ v1.2.0: Sesler, müzik, tanıtım videoları
+- Her kedinin kendi sesi var: kaçarken mutlu miyav (kombolarda incelir), çarpınca somurtkan "mrrr" (formant sentezi, ses dosyası yok)
+- Sakin lo-fi arka plan müziği (pad, bas, kalimba, shaker), her bölümde yeni melodi, ayarlarda ayrı açma/kapama
+- Kombo yazıları ekran kenarından taşmıyor
+- Tanıtım videoları (TR/EN, 1080×1920): `node scripts/make-videos.cjs`, ayrıntılar `store/VIDEOLAR.md`
+
 ## ⏭ Sonraki
 - Analitik (Firebase): D1/D7 tutma oranı, seviye bazında takılma noktaları
 - Uygulama içi değerlendirme isteği (In-App Review)

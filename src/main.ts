@@ -838,6 +838,12 @@ if (jump > 0) {
   const st = state as GameState | null; // assigned inside startLevel, TS can't see it
   if (s > 0 && st && st.timeLeft !== null) st.timeLeft = s;
 }
+// Video capture (?zoom=3): render a 360x640 layout at 1080x1920 for promo recordings.
+const zoom = Number(params.get('zoom'));
+if (zoom > 1) {
+  document.documentElement.style.zoom = String(zoom);
+  document.documentElement.classList.add('narrow');
+}
 // Test hook for automated QA (?debug=1): exposes the live game to the test runner.
 if (params.get('debug') === '1') {
   (window as unknown as Record<string, unknown>).__kk = {

@@ -23,7 +23,7 @@ function wav(chL, chR, rate) {
   await p.goto('http://localhost:5173/');
   const res = await p.evaluate(async ({ kind, secs, events }) => {
     const { MusicComposer } = await import('/src/platform/music.ts');
-    const { happyMew, grumpyMrrow, pop } = await import('/src/platform/synth.ts');
+    const { happyMew, grumpyMrrow, pop, tone } = await import('/src/platform/synth.ts');
     const rate = 44100, len = Math.ceil(+secs * rate);
     const ctx = new OfflineAudioContext(2, len, rate);
     const master = ctx.createGain(); master.gain.value = 0.8;
@@ -47,6 +47,9 @@ function wav(chL, chR, rate) {
       const [t, k, coat, step] = ev.split(':');
       if (k === 'e') { pop(ctx, sfxBus, +t, +step || 0); happyMew(ctx, sfxBus, +t + 0.03, +coat, 1 + (+step || 0) * 0.025); }
       if (k === 'b') grumpyMrrow(ctx, sfxBus, +t, +coat);
+      if (k === 'w') { [523, 659, 784, 1047].forEach((f, i) => tone(ctx, sfxBus, +t + i * 0.09, f, 0.22, 'triangle', 0.35)); tone(ctx, sfxBus, +t + 0.36, 1568, 0.4, 'sine', 0.2); happyMew(ctx, sfxBus, +t + 0.5, 4, 1.1); }
+      if (k === 'l') [392, 330, 262].forEach((f, i) => tone(ctx, sfxBus, +t + i * 0.14, f, 0.25, 'triangle', 0.3, f * 0.94));
+      if (k === 'h') { tone(ctx, sfxBus, +t, 1200, 0.15, 'sine', 0.25, 1600); tone(ctx, sfxBus, +t + 0.08, 1800, 0.2, 'sine', 0.15, 2400); }
     }
     const buf = await ctx.startRendering();
     const L = buf.getChannelData(0), R = buf.getChannelData(1);

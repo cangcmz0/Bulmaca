@@ -7,9 +7,9 @@ Oyun teknik olarak hazır. Bu rehber, Play Console'da senin yapman gereken adım
 | | Durum |
 |---|---|
 | Hedef API | Android 16 (API 36), Play'in şu anki kuralı |
-| Paket | `release/KediKacisi-1.1.0.aab`, yükleme anahtarıyla imzalı |
+| Paket | `release/KediKacisi-1.2.0.aab`, yükleme anahtarıyla imzalı |
 | Paket adı | `com.kedikacisi.game` (ilk yüklemeden sonra **asla değişmez**) |
-| Sürüm | 1.1.0 (versionCode 11) |
+| Sürüm | 1.2.0 (versionCode 12) |
 | Reklam | AdMob ödüllü ve geçiş reklamları, Google'ın AB onay formuyla birlikte. **Şimdilik test kimlikleriyle geliyor.** |
 | Satın alma | Google Play Billing 9.1: 5 ürün, oyun içi mağaza ve satın alımların geri yüklenmesi |
 | Simge, açılış ekranı, mağaza görselleri | `store/` klasöründe |
@@ -116,7 +116,7 @@ Satın alımları Google Play kendisi işliyor. Oyun satın alma bilgisini bir s
 ## 6. Kapalı test (14 günlük sayaç)
 1. **Test → Kapalı test → Kanal oluştur**.
 2. Test kullanıcıları: en az **12 kişinin** Gmail adresini ekle (aile, arkadaş, test grupları).
-3. **Yeni sürüm oluştur → `release/KediKacisi-1.1.0.aab` dosyasını yükle**.
+3. **Yeni sürüm oluştur → `release/KediKacisi-1.2.0.aab` dosyasını yükle**.
    - İlk yüklemede **Play Uygulama İmzalama**'yı kabul et (önerilen). Google son imzayı kendisi atar, bizim anahtarımız yükleme anahtarı olarak kalır.
    - Sürüm notu: "İlk test sürümü / First test build".
 4. İncelemeye gönder. Onay gelince test kullanıcılarına katılım linkini gönder. **12 kişi katılıp 14 gün boyunca kalmalı.** Arada oynamaları ve geri bildirim vermeleri iyi olur, Google etkileşime de bakıyor.
@@ -141,7 +141,7 @@ keyAlias=upload
 keyPassword=<aynı şifre>
 ```
 
-1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (11 → 12), `versionName`'i güncelle.
+1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (12 → 13), `versionName`'i güncelle.
 2. `npm run release` komutunu çalıştır.
 3. Çıktılar:
    - `android/app/build/outputs/bundle/release/app-release.aab` (Play'e yüklenecek olan)

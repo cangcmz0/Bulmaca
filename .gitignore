@@ -10,3 +10,5 @@ apk-out
 *.keystore
 keystore.properties
 release/
+store/videos/
+store/audio-preview/
