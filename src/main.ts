@@ -293,7 +293,13 @@ $('board').addEventListener('pointerdown', (e) => {
     combo = 0;
     renderer.bump(res.cat, res.dir, res.steps);
     const delay = Math.max(60, (res.steps / 16) * 1000);
-    window.setTimeout(() => { sfx.bump(res.cat.coat); vibrate(60); renderHearts(state!.lives); }, delay);
+    const bumpedIn = state;
+    window.setTimeout(() => {
+      if (state !== bumpedIn) return; // left the level mid-bump
+      sfx.bump(res.cat.coat);
+      vibrate(60);
+      renderHearts(bumpedIn.lives);
+    }, delay);
     if (state.level.number === 1) setTip('tutorial2');
     if (state.lost) window.setTimeout(() => showLose(), 900);
   }
@@ -327,7 +333,10 @@ function finishWin(): void {
   fails.delete(n);
   save(data);
   renderHints();
+  const wonState = state;
   window.setTimeout(() => {
+    // The player may have left (back button, home) before the card appeared: don't show it then.
+    if (state !== wonState || $('game').classList.contains('hidden')) return;
     const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('');
     if (n === TOTAL_LEVELS) {
       openModal(art, t('finalTitle'), t('finalText'), [
