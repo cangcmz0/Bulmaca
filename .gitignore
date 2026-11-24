@@ -12,3 +12,4 @@ keystore.properties
 release/
 store/videos/
 store/audio-preview/
+dist-artifact
