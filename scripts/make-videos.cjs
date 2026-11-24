@@ -15,13 +15,13 @@ const TEXT = {
     hookFail: 'Bunu çözebilir misin? 🤯', spinners: 'Fırıldaklara dikkat… 🌀', better: 'Sen daha iyisini yapabilir misin?',
     satisfying: 'Bu kadar tatmin edici olmamalı 😌', flawless: 'Kusursuz! ✨',
     spin: '🌀 Fırıldak: her kaçışta döner', sleepy: '😴 Uykucu: dokun, uyansın', scared: '😰 Korkak: TERS yöne kaçar', rules: '3 kedi, 40.000 bölüm',
-    title: 'Kedi Kaçışı', tagline: 'Sırayı bul, kedileri kurtar!', cta: 'Ücretsiz oyna', store: "Google Play'de",
+    title: 'Patikaç', tagline: 'Sırayı bul, kedileri kurtar!', cta: 'Ücretsiz oyna', store: "Google Play'de",
   },
   en: {
     hookFail: 'Can you solve this? 🤯', spinners: 'Watch the spinners… 🌀', better: 'Think you can do better?',
     satisfying: 'This is way too satisfying 😌', flawless: 'Flawless! ✨',
     spin: '🌀 Spinner: turns on every escape', sleepy: '😴 Sleepy: tap to wake', scared: '😰 Scaredy: runs BACKWARDS', rules: '3 cats, 40,000 levels',
-    title: 'Cat Escape', tagline: 'Find the order, free the cats!', cta: 'Play free', store: 'on Google Play',
+    title: 'Patikaç', tagline: 'Find the order, free the cats!', cta: 'Play free', store: 'on Google Play',
   },
 };
 

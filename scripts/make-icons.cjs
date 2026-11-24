@@ -82,8 +82,8 @@ const BG = '#ffb27a';
   }
   await write(`${RES}/drawable/splash.png`, { w: 480, h: 320, bg: 'splash', cat: 0.42 });
   await write('store/icon-512.png', { w: 512, h: 512, bg: 'full', cat: 0.66 });
-  await write('store/feature-graphic-tr.png', { w: 1024, h: 500, bg: 'full', feature: true, title: 'Kedi Kaçışı', tagline: 'Sırayı bul, kedileri kurtar!', titleSize: 118 });
-  await write('store/feature-graphic-en.png', { w: 1024, h: 500, bg: 'full', feature: true, title: 'Cat Escape', tagline: 'Find the order, free the cats!', titleSize: 118 });
+  await write('store/feature-graphic-tr.png', { w: 1024, h: 500, bg: 'full', feature: true, title: 'Patikaç', tagline: 'Sırayı bul, kedileri kurtar!', titleSize: 118 });
+  await write('store/feature-graphic-en.png', { w: 1024, h: 500, bg: 'full', feature: true, title: 'Patikaç', tagline: 'Find the order, free the cats!', titleSize: 118 });
   fs.writeFileSync(`${RES}/values/ic_launcher_background.xml`, `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${BG.toUpperCase()}</color>\n</resources>\n`);
   console.log('icons, splash and store graphics written');
   await b.close();

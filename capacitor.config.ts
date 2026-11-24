@@ -2,8 +2,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   // The Play Store package name. It can never change after the first upload.
-  appId: 'com.kedikacisi.game',
-  appName: 'Cat Escape',
+  appId: 'com.patikac.game',
+  appName: 'Patikaç',
   webDir: 'dist',
   android: { backgroundColor: '#ffd2b3' },
   plugins: {

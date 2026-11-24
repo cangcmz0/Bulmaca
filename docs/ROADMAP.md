@@ -73,6 +73,14 @@
 - Miyavlar daha doğal (açılıp kapanan ağız filtresi, yumuşak ses kaynağı, akıcı perde eğrisi), çarpma sesi yumuşadı
 - Müzik daha sakin: 68 BPM, davul ve shaker yok, seyrek melodi ve hafif yankı, öncekinden ~8 dB kısık
 
+## ✅ v1.3.0: Yeni isim ve yayın öncesi son inceleme
+- **İsim: Patikaç** (paket: `com.patikac.game`). "Cat Escape" ve "Kedi Kaçışı" adları başka oyunlarda kullanılıyordu, Patikaç için aramada eşleşme çıkmadı.
+- Reklam veya Google Play ödeme ekranı açıkken bölüm saati ve fırıldaklar duruyor
+- Oyun sırasında satın alma yapılınca tema değişmiyor
+- Bölüm bittikten hemen sonra çıkılınca geç gelen kazanma kartı çıkmıyor
+- Gizlilik politikasına iletişim e-postası ve satın alma bölümü eklendi
+- Mağaza görselleri, ekran görüntüleri ve videolar yeni isimle yeniden üretildi
+
 ## ⏭ Sonraki
 - Analitik (Firebase): D1/D7 tutma oranı, seviye bazında takılma noktaları
 - Uygulama içi değerlendirme isteği (In-App Review)

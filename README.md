@@ -1,4 +1,4 @@
-# Kedi Kaçışı (Cat Escape)
+# Patikaç
 
 A cute puzzle game for Android and the web. Each cat faces one direction. Tap a cat and it runs that way. If another cat is in the way it bumps and you lose a life, so you have to free the cats in the right order.
 

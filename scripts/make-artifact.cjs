@@ -14,6 +14,6 @@ const css = fs.readFileSync(path.join(dir, 'assets', assets.find((f) => f.endsWi
 const code = fs.readFileSync(path.join(dir, 'assets', js[0]), 'utf8');
 if (code.includes('</script')) throw new Error('script contains a closing tag');
 const body = html.match(/<body>([\s\S]*)<\/body>/)[1].replace(/\s*<script type="module"[^>]*><\/script>/, '');
-const out = `<title>Kedi Kaçışı</title>\n<style>${css}</style>\n${body}\n<script type="module">${code}</script>\n`;
+const out = `<title>Patikaç</title>\n<style>${css}</style>\n${body}\n<script type="module">${code}</script>\n`;
 fs.writeFileSync(process.argv[2], out);
 console.log(`${process.argv[2]}: ${(out.length / 1024).toFixed(0)} KB`);

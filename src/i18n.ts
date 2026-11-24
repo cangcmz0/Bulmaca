@@ -1,6 +1,6 @@
 const STRINGS = {
   tr: {
-    title: 'Kedi Kaçışı',
+    title: 'Patikaç',
     subtitle: 'Kedileri doğru sırayla kaçır!',
     play: 'Oyna',
     level: 'Seviye',
@@ -117,7 +117,7 @@ const STRINGS = {
     bonusHint: '📺 Reklam izle, +1 ipucu',
   },
   en: {
-    title: 'Cat Escape',
+    title: 'Patikaç',
     subtitle: 'Let the cats out in the right order!',
     play: 'Play',
     level: 'Level',

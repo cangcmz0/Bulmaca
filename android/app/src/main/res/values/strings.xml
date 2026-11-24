@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Cat Escape</string>
-    <string name="title_activity_main">Cat Escape</string>
-    <string name="package_name">com.kedikacisi.game</string>
-    <string name="custom_url_scheme">com.kedikacisi.game</string>
+    <string name="app_name">Patikaç</string>
+    <string name="title_activity_main">Patikaç</string>
+    <string name="package_name">com.patikac.game</string>
+    <string name="custom_url_scheme">com.patikac.game</string>
     <!-- AdMob application ID. Google's TEST app ID until set with: npm run set-admob -->
     <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

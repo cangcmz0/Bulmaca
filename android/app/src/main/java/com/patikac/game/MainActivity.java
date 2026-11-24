@@ -1,4 +1,4 @@
-package com.kedikacisi.game;
+package com.patikac.game;
 
 import com.getcapacitor.BridgeActivity;
 

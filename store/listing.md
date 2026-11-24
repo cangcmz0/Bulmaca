@@ -1,12 +1,12 @@
 # Mağaza sayfası metinleri
 
-Play Console → **Büyüme → Mağaza varlığı → Ana mağaza girişi**. Varsayılan dil İngilizce (en-US) olsun; Türkçe'yi "Çeviri ekle" ile ekle.
+Play Console → **Büyüme → Mağaza varlığı → Ana mağaza girişi**. Varsayılan dil Türkçe (tr-TR) olsun, İngilizce'yi "Çeviri ekle" ile ekle.
 
 ---
 
-## 🇬🇧 English (en-US) – varsayılan
+## 🇬🇧 English (en-US) – çeviri
 
-**App name** (max 30): `Cat Escape: Logic Puzzle`
+**App name** (max 30): `Patikaç: Cat Puzzle`
 
 **Short description** (max 80):
 `Free the cats in the right order! 40,000 cute, brain-teasing puzzle levels.`
@@ -36,9 +36,9 @@ Free to play. Contains optional ads and in-app purchases (no ads, hint packs).
 
 ---
 
-## 🇹🇷 Türkçe (tr-TR)
+## 🇹🇷 Türkçe (tr-TR) – varsayılan
 
-**Uygulama adı** (en fazla 30): `Kedi Kaçışı: Bulmaca`
+**Uygulama adı** (en fazla 30): `Patikaç: Kedi Bulmacası`
 
 **Kısa açıklama** (en fazla 80):
 `Kedileri doğru sırayla kaçır! 40.000 bölümlük beyin yakan sevimli bulmaca.`

@@ -195,8 +195,11 @@ function renderTimer(): void {
   el.classList.toggle('low', s <= 10);
 }
 
+/** True while an ad or the Play payment sheet covers the game: the clock and spinners hold. */
+let adShowing = false;
+
 function clockRunning(now: number): boolean {
-  return !!state && !winPending && now >= clockStartsAt &&
+  return !!state && !winPending && !adShowing && now >= clockStartsAt &&
     $('modal').classList.contains('hidden') && $('ad').classList.contains('hidden') &&
     !$('game').classList.contains('hidden');
 }
@@ -208,9 +211,14 @@ async function watchRewarded(): Promise<boolean> {
   notice.classList.remove('hidden');
   await new Promise((r) => window.setTimeout(r, 1100));
   notice.classList.add('hidden');
-  const ok = await ads.showRewarded();
-  if (ok) pacing.rewardedWatched();
-  return ok;
+  adShowing = true;
+  try {
+    const ok = await ads.showRewarded();
+    if (ok) pacing.rewardedWatched();
+    return ok;
+  } finally {
+    adShowing = false;
+  }
 }
 
 /**
@@ -405,7 +413,8 @@ async function nextLevel(n: number): Promise<void> {
     data.levelsSinceAd = 0;
     save(data);
     pacing.interstitialShown();
-    await ads.showInterstitial();
+    adShowing = true;
+    try { await ads.showInterstitial(); } finally { adShowing = false; }
   }
   startLevel(n);
 }
@@ -689,7 +698,10 @@ function openShop(): void {
 
 async function buy(id: ProductId): Promise<void> {
   closeModal();
-  const res = await store.buy(id);
+  // Google Play's payment sheet covers the game: hold the clock like during an ad.
+  adShowing = true;
+  let res: Awaited<ReturnType<typeof store.buy>>;
+  try { res = await store.buy(id); } finally { adShowing = false; }
   if (res === 'ok') grant(item(id), true);
   else if (res === 'error') showNotice(t('buyFailed'), 2600);
 }
@@ -702,7 +714,8 @@ function grant(it: CatalogItem, announce: boolean): void {
   if (!it.consumable) data.purchased.push(it.id);
   save(data);
   renderHints();
-  refreshHome();
+  // only repaint the home screen if it is the one showing (its theme would replace the level's)
+  if (!$('home').classList.contains('hidden')) refreshHome();
   if (!announce) return;
   sfx.win();
   const text = it.removesAds ? t('noAdsDone') : t('hintsAdded').replace('{n}', String(it.hints));
