@@ -31,7 +31,7 @@ Sounds easy? Wait until the spinners show up.
 ★ Combos, flawless finishes and a lot of very cute cats
 ★ Plays offline, one hand, in short or long sessions
 
-Free to play with optional ads.
+Free to play. Contains optional ads and in-app purchases (no ads, hint packs).
 ```
 
 ---
@@ -63,7 +63,7 @@ Kolay mı sandın? Fırıldaklar gelene kadar bekle.
 ★ Kombolar, kusursuz bitirişler ve bir sürü sevimli kedi
 ★ İnternetsiz, tek elle, kısa ya da uzun oyna
 
-Ücretsizdir, isteğe bağlı reklamlar içerir.
+Ücretsizdir. İsteğe bağlı reklamlar ve uygulama içi satın alımlar (reklamsız sürüm, ipucu paketleri) içerir.
 ```
 
 ---

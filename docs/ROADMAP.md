@@ -56,8 +56,13 @@
 - Android geri tuşu, yerel titreşim, arka plana alınınca sesin durması
 - İmzalı AAB/APK, gizlilik politikası, mağaza metinleri, Play Console rehberi (`docs/PLAY-STORE.md`)
 
+## ✅ v1.1.0: Uygulama içi satın alma
+- Google Play Billing 9.1 (Play'in 8+ kuralını karşılıyor), `@capgo/native-purchases`
+- 5 ürün: başlangıç paketi $3.99/₺99,99, reklamsız $2.99/₺79,99, ipucu paketleri $0.99-6.99 / ₺24,99-159,99
+- Oyun içi mağaza, ipucuyla geri alma, can, süre, uyandırma ve seviye geçme, iki seviye arasında başlangıç paketi teklifi
+- Reklamsız sürüm yeni telefonda veya yeniden kurulumda otomatik geri yükleniyor
+
 ## ⏭ Sonraki
-- "Reklamsız" uygulama içi satın alma (Google Play Billing)
 - Analitik (Firebase): D1/D7 tutma oranı, seviye bazında takılma noktaları
 - Uygulama içi değerlendirme isteği (In-App Review)
 - Yerel bildirim: günlük hediye ve seri hatırlatması

@@ -11,7 +11,9 @@ import type { Cat, CatKind } from './core/types';
 import { Key, LANG, t } from './i18n';
 import { ads } from './platform/ads';
 import { haptics, sfx, vibrate } from './platform/audio';
+import { CATALOG, CatalogItem, HINT_COST, ProductId, item } from './platform/catalog';
 import { MONET, pacing } from './platform/monetization';
+import { store } from './platform/store';
 import { load, save, todayKey, yesterdayKey } from './platform/storage';
 import { COATS, drawCat, drawSleepy } from './render/cat';
 import { HomeScene } from './render/home';
@@ -378,6 +380,16 @@ function finishWin(): void {
 
 async function nextLevel(n: number): Promise<void> {
   closeModal();
+  if (shouldOfferStarter(n)) {
+    // The one well-timed offer: engaged players, at most every 3 days, never mid-level.
+    data.starterShownAt = Date.now();
+    save(data);
+    openModal('<span class="big-emoji">🎁</span>', t('starterTitle'), t('starterText'), [
+      { label: `${t('prodStarter')} · ${store.price('starter_pack')}`, primary: true, run: async () => { await buy('starter_pack'); startLevel(n); } },
+      { label: t('noThanks'), run: () => { closeModal(); startLevel(n); } },
+    ], t('shopNote'));
+    return;
+  }
   if (pacing.shouldShowInterstitial(n, data.levelsSinceAd, data.noAds)) {
     data.levelsSinceAd = 0;
     save(data);
@@ -406,6 +418,7 @@ function showLose(firstTime = true): void {
         else showLose(false);
       },
     });
+    actions.push(...hintAction(HINT_COST.time, 'whatTime', () => state!.addTime(MONET.rewardedSeconds)));
   } else {
     actions.push({
       label: t('watchLife'), primary: true,
@@ -417,22 +430,15 @@ function showLose(firstTime = true): void {
         } else showLose(false);
       },
     });
+    actions.push(...hintAction(HINT_COST.life, 'whatLife', () => { state!.addLife(MONET.rewardedLives); renderHearts(0); }));
   }
   const tough = state.level.kind === 'hard' || state.level.kind === 'boss';
   if (!isDaily && tough && (fails.get(n) ?? 0) >= MONET.skipAfterFails) {
     actions.push({
       label: t('skip'),
-      run: async () => {
-        closeModal();
-        if (await watchRewarded()) {
-          data.stars[n] = Math.max(data.stars[n] ?? 0, 1);
-          data.level = Math.max(data.level, n + 1);
-          fails.delete(n);
-          save(data);
-          startLevel(n + 1);
-        } else showLose(false);
-      },
+      run: async () => { closeModal(); if (await watchRewarded()) skipLevel(n); else showLose(false); },
     });
+    actions.push(...hintAction(HINT_COST.skip, 'whatSkip', () => skipLevel(n)));
   }
   actions.push({
     label: t('retry'),
@@ -506,22 +512,14 @@ function showTrapped(firstTime: boolean): void {
       if (await watchRewarded()) undoToWinnable();
       else showTrapped(false);
     },
-  }];
+  }, ...hintAction(HINT_COST.undo, 'whatUndo', () => undoToWinnable())];
   const tough = state.level.kind === 'hard' || state.level.kind === 'boss';
   if (!isDaily && tough && (fails.get(n) ?? 0) >= MONET.skipAfterFails) {
     actions.push({
       label: t('skip'),
-      run: async () => {
-        closeModal();
-        if (await watchRewarded()) {
-          data.stars[n] = Math.max(data.stars[n] ?? 0, 1);
-          data.level = Math.max(data.level, n + 1);
-          fails.delete(n);
-          save(data);
-          startLevel(n + 1);
-        } else showTrapped(false);
-      },
+      run: async () => { closeModal(); if (await watchRewarded()) skipLevel(n); else showTrapped(false); },
     });
+    actions.push(...hintAction(HINT_COST.skip, 'whatSkip', () => skipLevel(n)));
   }
   actions.push({ label: t('retry'), run: () => { closeModal(); startLevel(n); } });
   openModal('<span class="big-emoji">🪤</span>', t('trappedTitle'), t('trappedText'), actions, t('trappedAdNote'));
@@ -556,6 +554,7 @@ $('hint-btn').addEventListener('click', () => {
         }
       },
     },
+    { label: t('getHints'), run: openShop },
     { label: t('cancel'), run: closeModal },
   ]);
 });
@@ -575,6 +574,11 @@ $('wake-btn').addEventListener('click', () => {
         }
       },
     },
+    ...hintAction(HINT_COST.wake, 'whatWake', () => {
+      state?.wakeAll().forEach((c: Cat) => renderer.wake(c));
+      renderWake();
+      sfx.hint();
+    }),
     { label: t('cancel'), run: closeModal },
   ]);
 });
@@ -603,6 +607,106 @@ $('gift-btn').addEventListener('click', () => {
   ]);
 });
 
+// ---------------------------------------------------------------- shop & hint spending
+
+/** "Spend N hints" option for a rescue card, offered only when the player has enough. */
+function hintAction(cost: number, what: Key, apply: () => void): Action[] {
+  if (data.hints < cost) return [];
+  return [{
+    label: t('spendHint').replace('{n}', String(cost)).replace('{what}', t(what)),
+    run: () => {
+      closeModal();
+      data.hints -= cost;
+      save(data);
+      renderHints();
+      apply();
+    },
+  }];
+}
+
+function skipLevel(n: number): void {
+  data.stars[n] = Math.max(data.stars[n] ?? 0, 1);
+  data.level = Math.max(data.level, n + 1);
+  fails.delete(n);
+  save(data);
+  startLevel(n + 1);
+}
+
+function shouldOfferStarter(n: number): boolean {
+  return !isDaily && n >= 15 && data.wins >= 12 && !data.noAds && store.available() &&
+    !data.purchased.includes('starter_pack') && Date.now() - data.starterShownAt > 3 * 86400000;
+}
+
+function productName(it: CatalogItem): string {
+  if (it.id === 'starter_pack') return t('prodStarter');
+  if (it.id === 'remove_ads') return t('prodNoAds');
+  return t('prodHints').replace('{n}', String(it.hints));
+}
+
+function showNotice(text: string, ms = 1800, ok = false): void {
+  const notice = $('ad-notice');
+  notice.textContent = text;
+  notice.classList.toggle('toast-ok', ok);
+  notice.classList.remove('hidden');
+  window.setTimeout(() => notice.classList.add('hidden'), ms);
+}
+
+function openShop(): void {
+  sfx.click();
+  if (!store.available()) {
+    openModal('<span class="big-emoji">🛒</span>', t('shop'), t('shopUnavailable'), [{ label: t('close'), primary: true, run: closeModal }]);
+    return;
+  }
+  const badgeText = { popular: t('badgePopular'), bestValue: t('badgeBest'), deal: t('badgeDeal') };
+  const actions: Action[] = [];
+  for (const it of CATALOG) {
+    // Remove Ads and the starter pack disappear once ads are gone.
+    if (!it.consumable && (data.noAds || data.purchased.includes(it.id))) continue;
+    const name = productName(it);
+    const badge = it.badge ? `<span class="badge-tag">${badgeText[it.badge]}</span>` : '';
+    actions.push({
+      label: `${name} ${store.price(it.id)}`,
+      html: `<span>${name}${badge}</span><span class="price">${store.price(it.id)}</span>`,
+      className: `btn btn-shop${it.badge === 'deal' ? ' featured' : ''}`,
+      run: () => void buy(it.id),
+    });
+  }
+  actions.push({ label: t('restore'), run: () => void restorePurchases(true) });
+  actions.push({ label: t('close'), primary: true, run: closeModal });
+  openModal('<span class="big-emoji">🛒</span>', t('shop'), '', actions, t('shopNote'));
+}
+
+async function buy(id: ProductId): Promise<void> {
+  closeModal();
+  const res = await store.buy(id);
+  if (res === 'ok') grant(item(id), true);
+  else if (res === 'error') showNotice(t('buyFailed'), 2600);
+}
+
+/** Gives what a product contains. Owned products are granted once, even if restored again. */
+function grant(it: CatalogItem, announce: boolean): void {
+  if (!it.consumable && data.purchased.includes(it.id)) return;
+  data.hints += it.hints;
+  if (it.removesAds) data.noAds = true;
+  if (!it.consumable) data.purchased.push(it.id);
+  save(data);
+  renderHints();
+  refreshHome();
+  if (!announce) return;
+  sfx.win();
+  const text = it.removesAds ? t('noAdsDone') : t('hintsAdded').replace('{n}', String(it.hints));
+  openModal('<span class="big-emoji">💛</span>', t('thanks'), text, [{ label: t('close'), primary: true, run: closeModal }],
+    it.removesAds ? t('hintsAdded').replace('{n}', String(it.hints)) : '');
+}
+
+async function restorePurchases(manual: boolean): Promise<void> {
+  if (manual) closeModal();
+  for (const id of await store.owned()) grant(item(id), false);
+  if (manual) showNotice(t('restored'), 1800, true);
+}
+
+$('shop-btn').addEventListener('click', () => { sfx.unlock(); openShop(); });
+
 function goHome(): void {
   closeModal();
   state = null;
@@ -629,6 +733,7 @@ function openSettings(): void {
   if (ads.privacyOptionsRequired()) {
     actions.push({ label: t('privacyOptions'), run: async () => { closeModal(); await ads.showPrivacyOptions(); } });
   }
+  if (!data.noAds) actions.push({ label: t('removeAdsSetting'), run: openShop });
   actions.push({ label: t('privacyPolicy'), run: () => { window.open(PRIVACY_URL, '_blank'); } });
   actions.push({ label: t('close'), primary: true, run: closeModal });
   openModal(icons.gear.replace('<svg', '<svg class="settings-art"'), t('settings'), '', actions, `${t('title')} · ${t('version')} ${__APP_VERSION__}`);
@@ -664,7 +769,7 @@ if (Capacitor.isNativePlatform()) {
 
 // ---------------------------------------------------------------- modal
 
-interface Action { label: string; primary?: boolean; run: () => void | Promise<void> }
+interface Action { label: string; primary?: boolean; run: () => void | Promise<void>; html?: string; className?: string }
 
 function openModal(artHtml: string, title: string, text: string, actions: Action[], note = ''): void {
   $('modal-art').innerHTML = artHtml;
@@ -679,8 +784,10 @@ function openModal(artHtml: string, title: string, text: string, actions: Action
   box.innerHTML = '';
   for (const a of actions) {
     const b = document.createElement('button');
-    b.className = `btn ${a.primary ? 'btn-primary' : 'btn-ghost'}`;
-    b.textContent = a.label;
+    b.className = a.className ?? `btn ${a.primary ? 'btn-primary' : 'btn-ghost'}`;
+    if (a.html) b.innerHTML = a.html;
+    else b.textContent = a.label;
+    b.setAttribute('aria-label', a.label);
     b.onclick = () => { sfx.click(); void a.run(); };
     box.appendChild(b);
   }
@@ -709,7 +816,11 @@ function loop(now: number): void {
 refreshHome();
 showScreen('home');
 // Consent form (where required) and ad SDK start, after the first frame so launch stays quick.
-requestAnimationFrame(() => void ads.init());
+requestAnimationFrame(() => {
+  void ads.init();
+  // Prices from Google Play, then quietly restore Remove Ads on a new phone or after reinstall.
+  void store.init().then(() => restorePurchases(false));
+});
 requestAnimationFrame(loop);
 
 // Dev helpers: ?level=N jumps straight into a level, &time=S shortens its clock for testing.

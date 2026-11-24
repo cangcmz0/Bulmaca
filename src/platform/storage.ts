@@ -17,6 +17,10 @@ export interface SaveData {
   wins: number;
   /** How many times each special-cat reminder tip has been shown. */
   reminders: Record<string, number>;
+  /** Non-consumable products already granted (so bonus hints are given once). */
+  purchased: string[];
+  /** When the starter pack offer was last shown (ms). */
+  starterShownAt: number;
 }
 
 const KEY = 'kedi-kacisi-save-v1';
@@ -35,6 +39,8 @@ const DEFAULTS: SaveData = {
   giftDay: null,
   wins: 0,
   reminders: {},
+  purchased: [],
+  starterShownAt: 0,
 };
 
 export function load(): SaveData {
