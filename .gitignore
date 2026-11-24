@@ -4,3 +4,9 @@ dist
 .DS_Store
 android/app/build
 apk-out
+
+# release signing (never commit)
+*.jks
+*.keystore
+keystore.properties
+release/

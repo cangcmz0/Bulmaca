@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 /** Tiny WebAudio synth: no audio files to ship, every sound is generated. */
 class Sfx {
   private ctx: AudioContext | null = null;
@@ -5,6 +8,11 @@ class Sfx {
   enabled = true;
   private combo = 0;
   private lastPop = 0;
+
+  /** Called when the app goes to the background, so no sound keeps the audio session alive. */
+  suspend(): void {
+    void this.ctx?.suspend();
+  }
 
   /** Must be called from a user gesture on mobile browsers. */
   unlock(): void {
@@ -91,7 +99,15 @@ class Sfx {
 
 export const sfx = new Sfx();
 
+export const haptics = { enabled: true };
+
+/** Short haptic tap: native haptics on the phone, the Vibration API in browsers. */
 export function vibrate(ms: number): void {
+  if (!haptics.enabled) return;
+  if (Capacitor.isNativePlatform()) {
+    void Haptics.impact({ style: ms >= 40 ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {});
+    return;
+  }
   try {
     navigator.vibrate?.(ms);
   } catch {

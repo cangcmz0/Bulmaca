@@ -3,12 +3,14 @@ import '@fontsource/fredoka/latin-ext-500.css';
 import '@fontsource/fredoka/latin-600.css';
 import '@fontsource/fredoka/latin-ext-600.css';
 import './style.css';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { GameState } from './core/game';
 import { INTRO, TOTAL_LEVELS, dailyLevel, generateLevel, kindFor } from './core/generator';
 import type { Cat, CatKind } from './core/types';
 import { Key, LANG, t } from './i18n';
 import { ads } from './platform/ads';
-import { sfx, vibrate } from './platform/audio';
+import { haptics, sfx, vibrate } from './platform/audio';
 import { MONET, pacing } from './platform/monetization';
 import { load, save, todayKey, yesterdayKey } from './platform/storage';
 import { COATS, drawCat, drawSleepy } from './render/cat';
@@ -21,6 +23,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 const data = load();
 sfx.enabled = data.sound;
+haptics.enabled = data.vibration;
+
+/** Hosted privacy policy (docs/privacy-policy.html via GitHub Pages). */
+const PRIVACY_URL = 'https://cangcmz0.github.io/Bulmaca/privacy-policy.html';
 document.documentElement.lang = LANG;
 document.title = t('title');
 document.querySelectorAll<HTMLElement>('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t as Key)));
@@ -81,7 +87,7 @@ function refreshHome(): void {
   $('gift-label').textContent = `🎁 ${t('gift')}`;
   $('gift-sub').textContent = giftReady ? t('giftReady') : t('giftTomorrow');
   $('gift-btn').classList.toggle('ready', giftReady);
-  $('sound-btn').innerHTML = data.sound ? icons.soundOn : icons.soundOff;
+  $('settings-btn').innerHTML = icons.gear;
 }
 
 // ---------------------------------------------------------------- game flow
@@ -608,14 +614,54 @@ function goHome(): void {
 $('back-btn').addEventListener('click', () => { sfx.click(); goHome(); });
 $('play-btn').addEventListener('click', () => { sfx.unlock(); sfx.click(); startLevel(data.level); });
 $('daily-btn').addEventListener('click', () => { sfx.unlock(); sfx.click(); startLevel(-1); });
-$('sound-btn').addEventListener('click', () => {
-  data.sound = !data.sound;
-  sfx.enabled = data.sound;
-  save(data);
-  sfx.unlock();
-  sfx.click();
-  refreshHome();
-});
+function openSettings(): void {
+  const onOff = (v: boolean) => (v ? t('on') : t('off'));
+  const actions: Action[] = [
+    {
+      label: `${data.sound ? '🔊' : '🔈'} ${t('sound')}: ${onOff(data.sound)}`,
+      run: () => { data.sound = !data.sound; sfx.enabled = data.sound; save(data); sfx.unlock(); sfx.click(); openSettings(); },
+    },
+    {
+      label: `📳 ${t('vibration')}: ${onOff(data.vibration)}`,
+      run: () => { data.vibration = !data.vibration; haptics.enabled = data.vibration; save(data); vibrate(30); openSettings(); },
+    },
+  ];
+  // Required by Google's consent rules for players in the EU/UK.
+  if (ads.privacyOptionsRequired()) {
+    actions.push({ label: t('privacyOptions'), run: async () => { closeModal(); await ads.showPrivacyOptions(); } });
+  }
+  actions.push({ label: t('privacyPolicy'), run: () => { window.open(PRIVACY_URL, '_blank'); } });
+  actions.push({ label: t('close'), primary: true, run: closeModal });
+  openModal(icons.gear.replace('<svg', '<svg class="settings-art"'), t('settings'), '', actions, `${t('title')} · ${t('version')} ${__APP_VERSION__}`);
+}
+
+$('settings-btn').addEventListener('click', () => { sfx.unlock(); sfx.click(); openSettings(); });
+
+// ---------------------------------------------------------------- Android integration
+
+if (Capacitor.isNativePlatform()) {
+  let lastBack = 0;
+  void App.addListener('backButton', () => {
+    if (!$('ad').classList.contains('hidden')) return; // never skip an ad with back
+    if (!$('modal').classList.contains('hidden')) {
+      // Back closes a card only when it has a harmless way out (settings, offers, intros).
+      const title = $('modal-title').textContent ?? '';
+      const blocking = [t('trappedTitle'), t('loseTitle'), t('timeUpTitle')].includes(title);
+      if (!blocking) { closeModal(); return; }
+      if (state) { closeModal(); startLevel(state.level.number); }
+      return;
+    }
+    if (!$('game').classList.contains('hidden')) { goHome(); return; }
+    const now = Date.now();
+    if (now - lastBack < 2000) { void App.exitApp(); return; }
+    lastBack = now;
+    const notice = $('ad-notice');
+    notice.textContent = t('exitHint');
+    notice.classList.remove('hidden');
+    window.setTimeout(() => notice.classList.add('hidden'), 1800);
+  });
+  void App.addListener('pause', () => sfx.suspend());
+}
 
 // ---------------------------------------------------------------- modal
 
@@ -663,6 +709,8 @@ function loop(now: number): void {
 
 refreshHome();
 showScreen('home');
+// Consent form (where required) and ad SDK start, after the first frame so launch stays quick.
+requestAnimationFrame(() => void ads.init());
 requestAnimationFrame(loop);
 
 // Dev helpers: ?level=N jumps straight into a level, &time=S shortens its clock for testing.

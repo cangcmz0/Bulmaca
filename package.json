@@ -1,7 +1,7 @@
 {
   "name": "kedi-kacisi",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -10,17 +10,22 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "android": "vite build && cap sync android && cap open android",
-    "sync": "vite build && cap sync android"
+    "sync": "vite build && cap sync android",
+    "set-admob": "node scripts/set-admob-ids.mjs",
+    "release": "vite build && cap sync android && cd android && ./gradlew bundleRelease assembleRelease"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.0",
+    "@capacitor/cli": "^8.6.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "@capacitor/android": "^6.2.0",
-    "@capacitor/core": "^6.2.0",
+    "@capacitor-community/admob": "^8.3.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/haptics": "^8.0.2",
     "@fontsource/fredoka": "^5.1.0"
   }
 }
