@@ -141,7 +141,7 @@ keyAlias=upload
 keyPassword=<aynı şifre>
 ```
 
-1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (10 → 11), `versionName`'i güncelle.
+1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (11 → 12), `versionName`'i güncelle.
 2. `npm run release` komutunu çalıştır.
 3. Çıktılar:
    - `android/app/build/outputs/bundle/release/app-release.aab` (Play'e yüklenecek olan)
