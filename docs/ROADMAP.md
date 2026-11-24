@@ -48,7 +48,21 @@
 - **Sıkışınca:** "Reklam izle, geri al". Oyun tek reklamla tekrar çözülebilir bir konuma geri dönüyor.
 - **40.000 seviye**, zorluk eğrisi 40.000'e kadar yayıldı. Sonrasında Usta Modu var.
 
-## ⏭ v0.6: Mağazaya hazırlık
+## ✅ v1.0.0: Play Store'a hazır
+- Capacitor 8, Android 16 (API 36) hedefi (Play'in şu anki kuralı), edge-to-edge desteği
+- Gerçek AdMob (ödüllü ve geçiş reklamları) ve Google UMP onay formu. Şimdilik test kimlikleriyle, gerçekleri `npm run set-admob` ile giriliyor.
+- Simge, adaptif simge, açılış ekranı, mağaza görselleri ve ekran görüntüleri (TR/EN), hepsi oyunun kendi çiziminden üretildi
+- Ayarlar: ses, titreşim, reklam gizlilik seçenekleri, gizlilik politikası, sürüm
+- Android geri tuşu, yerel titreşim, arka plana alınınca sesin durması
+- İmzalı AAB/APK, gizlilik politikası, mağaza metinleri, Play Console rehberi (`docs/PLAY-STORE.md`)
+
+## ⏭ Sonraki
+- "Reklamsız" uygulama içi satın alma (Google Play Billing)
+- Analitik (Firebase): D1/D7 tutma oranı, seviye bazında takılma noktaları
+- Uygulama içi değerlendirme isteği (In-App Review)
+- Yerel bildirim: günlük hediye ve seri hatırlatması
+
+## (eski) v0.6: Mağazaya hazırlık
 - [ ] **AdMob:** `@capacitor-community/admob` eklentisi. `src/platform/ads.ts` içinde aynı arayüzü kullanan bir `AdMobAds` sınıfı yazılacak. Önce test ID'leri, sonra gerçek ID'ler. GDPR onayı için UMP kullanılacak.
 - [ ] **"Reklamsız" satın alma:** Google Play Billing (`@capacitor-community/in-app-purchases` ya da RevenueCat)
 - [ ] Android geri tuşu (`@capacitor/app`), titreşim (`@capacitor/haptics`)

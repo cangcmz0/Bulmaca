@@ -324,17 +324,16 @@ function finishWin(): void {
   save(data);
   renderHints();
   window.setTimeout(() => {
-    const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('') +
-      `<div class="stats">${statsLine}</div>`;
+    const art = [1, 2, 3].map((i) => `<span class="star ${i > stars ? 'off' : ''}">${icons.star}</span>`).join('');
     if (n === TOTAL_LEVELS) {
       openModal(art, t('finalTitle'), t('finalText'), [
         { label: t('toMaster'), primary: true, run: () => void nextLevel(n + 1) },
         { label: t('home'), run: goHome },
-      ]);
+      ], statsLine);
     } else if (isDaily) {
       openModal(art, t('winDaily'), data.streak > 0 ? `🔥 ${data.streak} ${t('streak')}` : '', [
         { label: t('home'), primary: true, run: goHome },
-      ]);
+      ], statsLine);
     } else if (boss) {
       // Rewarded "multiply your prize" right after a win is the best-performing ad slot in puzzles.
       openModal(art, t('bossWin'), t('bossReward'), [
@@ -352,7 +351,7 @@ function finishWin(): void {
           },
         },
         { label: t('next'), run: () => void nextLevel(n + 1) },
-      ]);
+      ], statsLine);
     } else {
       const actions: Action[] = [{ label: t('next'), primary: true, run: () => void nextLevel(n + 1) }];
       // An optional bonus every few wins: revenue the player chooses, never forced.
@@ -372,7 +371,7 @@ function finishWin(): void {
         });
       }
       actions.push({ label: t('home'), run: goHome });
-      openModal(art, perfect ? t('perfect') : t('winTitle'), '', actions);
+      openModal(art, perfect ? t('perfect') : t('winTitle'), '', actions, statsLine);
     }
   }, 650);
 }

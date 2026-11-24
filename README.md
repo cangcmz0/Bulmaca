@@ -18,13 +18,15 @@ npm run build      # production web build in dist/
 
 ## Android
 
-You need Android Studio (JDK 17 + Android SDK).
+You need JDK 21 and the Android SDK (platform 36). The app targets Android 16 (API 36).
 
 ```bash
 npm run android    # build, sync into android/, open Android Studio
+npm run release    # signed release .aab + .apk (needs android/keystore.properties)
+npm run set-admob -- <APP_ID> <REWARDED_ID> <INTERSTITIAL_ID>   # real AdMob IDs
 ```
 
-In Android Studio, use **Build > Generate Signed App Bundle** to make the `.aab` for the Play Console.
+Publishing steps (Play Console, AdMob, privacy policy, data safety) are in [docs/PLAY-STORE.md](docs/PLAY-STORE.md); store texts and graphics are in [store/](store/).
 
 ## Project layout
 

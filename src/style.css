@@ -391,3 +391,11 @@ h1 {
 }
 
 .card-art .settings-art { width: 56px; height: 56px; }
+
+/* Narrow phones: the wake booster shrinks to its icon so the progress bar keeps its room. */
+@media (max-width: 400px) {
+  .btn-wake span:last-child { display: none; }
+  .btn-wake { padding: 6px 12px; }
+  .btn-hint { padding: 6px 12px; }
+}
+.progress { min-width: 0; }
