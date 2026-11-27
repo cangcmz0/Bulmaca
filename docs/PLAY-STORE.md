@@ -7,9 +7,9 @@ Oyun teknik olarak hazır. Bu rehber, Play Console'da senin yapman gereken adım
 | | Durum |
 |---|---|
 | Hedef API | Android 16 (API 36), Play'in şu anki kuralı |
-| Paket | `release/Patikac-1.3.0.aab`, yükleme anahtarıyla imzalı |
+| Paket | `release/Patikac-1.3.1.aab`, yükleme anahtarıyla imzalı |
 | Paket adı | `com.patikac.game` (ilk yüklemeden sonra **asla değişmez**) |
-| Sürüm | 1.3.0 (versionCode 15) |
+| Sürüm | 1.3.1 (versionCode 16) |
 | Reklam | AdMob ödüllü ve geçiş reklamları, Google'ın AB onay formuyla birlikte. **Şimdilik test kimlikleriyle geliyor.** |
 | Satın alma | Google Play Billing 9.1: 5 ürün, oyun içi mağaza ve satın alımların geri yüklenmesi |
 | Simge, açılış ekranı, mağaza görselleri | `store/` klasöründe |
@@ -25,12 +25,13 @@ Oyun teknik olarak hazır. Bu rehber, Play Console'da senin yapman gereken adım
 2. Kimlik doğrulamasını tamamla (kimlik ve adres, birkaç gün sürebilir).
 3. **Kişisel hesaplarda kural:** Production'a çıkmadan önce **en az 12 test kullanıcısıyla, aralıksız 14 gün kapalı test** zorunlu. Bu yüzden kapalı teste hemen başla (5. adım).
 
-## 2. Gizlilik politikasını yayına al (GitHub Pages, ücretsiz)
-1. İletişim e-postası (Gocmez@outlook.com.tr) gizlilik politikasına yazıldı. Play Console'daki iletişim e-postası da bununla aynı olmalı.
-2. GitHub'da **cangcmz0/Bulmaca → Settings → Pages** sayfasını aç.
-3. Source: **Deploy from a branch**. Branch olarak bu çalışmanın dalını (ya da `main`'e birleştirdiysen `main`'i) ve klasör olarak **/docs** seç, Save'e bas.
-4. Birkaç dakika sonra adres hazır olur: `https://cangcmz0.github.io/Bulmaca/privacy-policy.html`
-   Oyundaki **Ayarlar → Gizlilik politikası** butonu zaten bu adresi açıyor.
+## 2. Gizlilik politikası ve kullanım koşulları
+Repo herkese açık, iki belge de repoda duruyor ve girişsiz görüntülenebiliyor:
+- Gizlilik politikası: `https://github.com/cangcmz0/Bulmaca/blob/ccr-ec313aae-fc735w/PRIVACY.md`
+- Kullanım koşulları: `https://github.com/cangcmz0/Bulmaca/blob/ccr-ec313aae-fc735w/TERMS.md`
+
+Oyundaki **Ayarlar → Gizlilik politikası / Kullanım koşulları** butonları bu adresleri açıyor. Play Console'daki gizlilik politikası alanına birinci adresi yaz. İstersen aynı metni Google Sites'a da koyabilirsin (`release/*-Google-Sites.txt`).
+Metinler `PRIVACY.md` ve `TERMS.md` dosyalarında; değişiklikten sonra `python3 scripts/make-legal.py` HTML ve düz metin kopyaları yeniden üretir.
 
 ## 3. AdMob (gerçek reklam geliri için)
 1. https://admob.google.com adresinden hesap aç, ödeme bilgilerini gir.
@@ -116,7 +117,7 @@ Satın alımları Google Play kendisi işliyor. Oyun satın alma bilgisini bir s
 ## 6. Kapalı test (14 günlük sayaç)
 1. **Test → Kapalı test → Kanal oluştur**.
 2. Test kullanıcıları: en az **12 kişinin** Gmail adresini ekle (aile, arkadaş, test grupları).
-3. **Yeni sürüm oluştur → `release/Patikac-1.3.0.aab` dosyasını yükle**.
+3. **Yeni sürüm oluştur → `release/Patikac-1.3.1.aab` dosyasını yükle**.
    - İlk yüklemede **Play Uygulama İmzalama**'yı kabul et (önerilen). Google son imzayı kendisi atar, bizim anahtarımız yükleme anahtarı olarak kalır.
    - Sürüm notu: "İlk test sürümü / First test build".
 4. İncelemeye gönder. Onay gelince test kullanıcılarına katılım linkini gönder. **12 kişi katılıp 14 gün boyunca kalmalı.** Arada oynamaları ve geri bildirim vermeleri iyi olur, Google etkileşime de bakıyor.
@@ -141,7 +142,7 @@ keyAlias=upload
 keyPassword=<aynı şifre>
 ```
 
-1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (15 → 16), `versionName`'i güncelle.
+1. `android/app/build.gradle` içinde `versionCode`'u 1 artır (16 → 17), `versionName`'i güncelle.
 2. `npm run release` komutunu çalıştır.
 3. Çıktılar:
    - `android/app/build/outputs/bundle/release/app-release.aab` (Play'e yüklenecek olan)

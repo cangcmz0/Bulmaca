@@ -81,4 +81,4 @@ Kolay mı sandın? Fırıldaklar gelene kadar bekle.
 - **Kategori:** Oyun → Bulmaca
 - **Etiketler:** Bulmaca, Mantık, Gündelik (Casual)
 - **İletişim e-postası:** Play bunu herkese açık gösterir. Gizlilik politikasındaki `[E-POSTA ADRESİNİZ]` yerine de aynısını yaz.
-- **Gizlilik politikası URL'si:** `https://cangcmz0.github.io/Bulmaca/privacy-policy.html` (yayına alma adımı `docs/PLAY-STORE.md` içinde)
+- **Gizlilik politikası URL'si:** `https://github.com/cangcmz0/Bulmaca/blob/ccr-ec313aae-fc735w/PRIVACY.md` (yayına alma adımı `docs/PLAY-STORE.md` içinde)

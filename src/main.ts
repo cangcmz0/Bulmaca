@@ -28,8 +28,10 @@ sfx.enabled = data.sound;
 sfx.musicEnabled = data.music;
 haptics.enabled = data.vibration;
 
-/** Hosted privacy policy (docs/privacy-policy.html via GitHub Pages). */
-const PRIVACY_URL = 'https://cangcmz0.github.io/Bulmaca/privacy-policy.html';
+/** Public legal pages (PRIVACY.md / TERMS.md in the public repo; the same URLs go in Play Console). */
+const LEGAL_BASE = 'https://github.com/cangcmz0/Bulmaca/blob/ccr-ec313aae-fc735w/';
+const PRIVACY_URL = `${LEGAL_BASE}PRIVACY.md`;
+const TERMS_URL = `${LEGAL_BASE}TERMS.md`;
 document.documentElement.lang = LANG;
 document.title = t('title');
 document.querySelectorAll<HTMLElement>('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t as Key)));
@@ -763,6 +765,7 @@ function openSettings(): void {
   }
   if (!data.noAds) actions.push({ label: t('removeAdsSetting'), run: openShop });
   actions.push({ label: t('privacyPolicy'), run: () => { window.open(PRIVACY_URL, '_blank'); } });
+  actions.push({ label: t('termsOfUse'), run: () => { window.open(TERMS_URL, '_blank'); } });
   actions.push({ label: t('close'), primary: true, run: closeModal });
   openModal(icons.gear.replace('<svg', '<svg class="settings-art"'), t('settings'), '', actions, `${t('title')} · ${t('version')} ${__APP_VERSION__}`);
 }
